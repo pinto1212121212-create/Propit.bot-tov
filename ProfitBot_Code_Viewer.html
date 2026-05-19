@@ -241,9 +241,9 @@ volSpikeShort= volSpikeRaw and close < open
 [c_zb, h_zb, l_zb]    = request.security(im_zb,    timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
 [s1c, s1h, s1l]        = request.security(smt_sym1, timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
 [s2c, s2h, s2l]        = request.security(smt_sym2, timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
-[p1c, p1o]             = request.security(psp_sym1, timeframe.period, [close, open],      lookahead=barmerge.lookahead_off)
-[p2c, p2o]             = request.security(psp_sym2, timeframe.period, [close, open],      lookahead=barmerge.lookahead_off)
-[p3c, p3o]             = request.security(psp_sym3, timeframe.period, [close, open],      lookahead=barmerge.lookahead_off)
+[p1c, p1o, p1h, p1l] = request.security(psp_sym1, timeframe.period, [close, open, high, low], lookahead=barmerge.lookahead_off)
+[p2c, p2o, p2h, p2l] = request.security(psp_sym2, timeframe.period, [close, open, high, low], lookahead=barmerge.lookahead_off)
+[p3c, p3o, p3h, p3l] = request.security(psp_sym3, timeframe.period, [close, open, high, low], lookahead=barmerge.lookahead_off)
 
 smtPivLow  = ta.pivotlow(low,   smt_pivot_l, smt_pivot_r)
 smtPivHigh = ta.pivothigh(high, smt_pivot_l, smt_pivot_r)
@@ -312,13 +312,13 @@ var float lastP3L = na
 var float lastP3H = na
 
 if not na(pspPivLow)
-    lastP1L := p1c[psp_pivot_r]
-    lastP2L := p2c[psp_pivot_r]
-    lastP3L := p3c[psp_pivot_r]
+    lastP1L := p1l[psp_pivot_r]
+    lastP2L := p2l[psp_pivot_r]
+    lastP3L := p3l[psp_pivot_r]
 if not na(pspPivHigh)
-    lastP1H := p1c[psp_pivot_r]
-    lastP2H := p2c[psp_pivot_r]
-    lastP3H := p3c[psp_pivot_r]
+    lastP1H := p1h[psp_pivot_r]
+    lastP2H := p2h[psp_pivot_r]
+    lastP3H := p3h[psp_pivot_r]
 
 pspBullRaw = ym_corr_ok and not na(lastP1L) and p1c < lastP1L and (not na(lastP2L) and p2c > lastP2L or not na(lastP3L) and p3c > lastP3L)
 pspBearRaw = ym_corr_ok and not na(lastP1H) and p1c > lastP1H and (not na(lastP2H) and p2c < lastP2H or not na(lastP3H) and p3c < lastP3H)
@@ -378,21 +378,22 @@ ind_txt = (use_stoch ? "STOCH " : "") + (use_bb ? "BB " : "") + (use_macd ? "MAC
 // TRAILING STOP
 // ══════════════════════════════════════════════════════════════════════════
 
-atrTrail             = ta.atr(trail_atr)
+atrTrail             = use_trail ? ta.atr(trail_atr) : 0.0
 var float trailLevel = na
 var float trailEntry = na
 var int   trailDir   = 0
 
-if strategy.position_size > 0
-    trailLevel := na(trailLevel) ? close - atrTrail * trail_mult : math.max(trailLevel, close - atrTrail * trail_mult)
-else if strategy.position_size < 0
-    trailLevel := na(trailLevel) ? close + atrTrail * trail_mult : math.min(trailLevel, close + atrTrail * trail_mult)
-else
-    trailLevel := na
+if use_trail
+    if strategy.position_size > 0
+        trailLevel := na(trailLevel) ? close - atrTrail * trail_mult : math.max(trailLevel, close - atrTrail * trail_mult)
+    else if strategy.position_size < 0
+        trailLevel := na(trailLevel) ? close + atrTrail * trail_mult : math.min(trailLevel, close + atrTrail * trail_mult)
+    else
+        trailLevel := na
 
-if strategy.position_size != 0 and strategy.position_size[1] == 0
-    trailEntry := close
-    trailDir   := strategy.position_size > 0 ? 1 : -1
+    if strategy.position_size != 0 and strategy.position_size[1] == 0
+        trailEntry := close
+        trailDir   := strategy.position_size > 0 ? 1 : -1
 
 trailHitLong   = use_trail and strategy.position_size > 0 and not na(trailLevel) and close < trailLevel
 trailHitShort  = use_trail and strategy.position_size < 0 and not na(trailLevel) and close > trailLevel
@@ -450,14 +451,13 @@ if shortSig and canShort and not (longSig and canLong)
 // FORCED CLOSES
 // ══════════════════════════════════════════════════════════════════════════
 
-if use_close and hm >= close_hm and strategy.position_size != 0
-    strategy.close_all(comment="⏰ סגירה", alert_message=close_msg)
-if not inSession and strategy.position_size != 0
-    strategy.close_all(comment="🏁 סשן", alert_message=close_msg)
-if not dailyLossOk and strategy.position_size != 0
-    strategy.close_all(comment="❌ הפסד", alert_message=close_msg)
-if not dailyProfitOk and strategy.position_size != 0
-    strategy.close_all(comment="✅ רווח", alert_message=close_msg)
+closeReason = use_close and hm >= close_hm ? "⏰ סגירה" :
+              not inSession                ? "🏁 סשן"  :
+              not dailyLossOk              ? "❌ הפסד" :
+              not dailyProfitOk            ? "✅ רווח" : ""
+
+if closeReason != "" and strategy.position_size != 0
+    strategy.close_all(comment=closeReason, alert_message=close_msg)
 
 // ══════════════════════════════════════════════════════════════════════════
 // VISUALS

@@ -1,0 +1,515 @@
+//@version=5
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║      ProfitBot | Jerusalem v3.4 — Prop Firm Killer Edition              ║
+// ║      NQ1! · 15min · 2 Accounts · TraderPost Webhook                     ║
+// ╠══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                          ║
+// ║  WHAT A PROP-FIRM GENIUS KNOWS THAT YOU DON'T:                          ║
+// ║                                                                          ║
+// ║  1) Trailing Drawdown — not Daily Loss — is the real killer.            ║
+// ║  2) Consistency rules (Apex 30% / TopStep 50%) punish big days.         ║
+// ║  3) News spikes blow up unfiltered bots in seconds.                     ║
+// ║  4) First 15 min after NY open = institutional stop-sweep.              ║
+// ║  5) Eval-mode and Funded-mode require DIFFERENT risk profiles.          ║
+// ║  6) Smooth equity curve > big winners (because consistency rules).      ║
+// ║                                                                          ║
+// ║  FIVE NEW WEAPONS vs v3.3 PRO:                                          ║
+// ║                                                                          ║
+// ║  A) BREAKEVEN STOP @ 1R + PARTIAL TP 50%  →  converts losers to        ║
+// ║     scratches, lets winners run to full 2R.                             ║
+// ║  B) INTRADAY PEAK LOCKOUT  →  if you give back X% of intraday peak,    ║
+// ║     day is locked. Saves the trailing drawdown.                         ║
+// ║  C) NEWS BLACKOUT WINDOWS  →  comma-list of HH:MM, blocks ±15 min.     ║
+// ║  D) AUTO-SCALING CONTRACTS  →  bet the house's money. 1→2 at +$300,    ║
+// ║     2→3 at +$600. Single loss resets to 1.                              ║
+// ║  E) FUNDED MODE TOGGLE  →  one checkbox auto-tightens everything       ║
+// ║     for live funded accounts: tighter SL, smaller target, fewer        ║
+// ║     trades. Eval defaults stay aggressive.                              ║
+// ║                                                                          ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+strategy("ProfitBot | Jerusalem v3.4 PropKiller", overlay=true, default_qty_type=strategy.fixed,
+     default_qty_value=1, currency=currency.USD, initial_capital=10000,
+     commission_type=strategy.commission.cash_per_contract, commission_value=2,
+     max_labels_count=500, max_lines_count=500, process_orders_on_close=true)
+
+// ══════════════════════════════════════════════════════════════════════════
+// FUNDED MODE — MASTER TOGGLE
+// ══════════════════════════════════════════════════════════════════════════
+
+funded_mode = input.bool(false, title="💎 Funded Mode (אוטומטית שמרני)", group="🎯 מצב", tooltip="כאשר מסומן — מהדק את כל הפרמטרים אוטומטית: SL הדוק יותר, target נמוך יותר, פחות עסקאות. השתמש בחשבון Funded חי.")
+
+// ══════════════════════════════════════════════════════════════════════════
+// SESSIONS
+// ══════════════════════════════════════════════════════════════════════════
+
+use_s1     = input.bool(true,  title="✅ Account A (בוקר)", group="🕐 סשנים", inline="s1")
+sess1      = input.session("0800-1200", title="שעות", group="🕐 סשנים", inline="s1")
+use_s2     = input.bool(false, title="✅ Account B (ערב)", group="🕐 סשנים", inline="s2")
+sess2      = input.session("1300-1600", title="שעות", group="🕐 סשנים", inline="s2")
+use_close  = input.bool(true,  title="✅ סגירה בסוף יום", group="⏰ סגירה", inline="cl")
+close_time = input.string("16:00", title="🕐", group="⏰ סגירה", inline="cl",
+     options=["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00",
+              "16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"])
+last_bar_guard = input.int(3, title="חסום N ברים אחרונים של סשן", minval=0, maxval=8, group="⏰ סגירה")
+
+// ══════════════════════════════════════════════════════════════════════════
+// RISK INPUTS — eval defaults; funded mode overrides at the end of this section
+// ══════════════════════════════════════════════════════════════════════════
+
+contracts_base = input.int(1,    title="חוזים בסיס",  minval=1, maxval=20,             group="💰 ניהול סיכון", inline="r1")
+max_loss_in    = input.float(700,title="הפסד יומי $", minval=0,                         group="💰 ניהול סיכון", inline="r1")
+max_profit_in  = input.float(1500,title="רווח יומי $",minval=0,                        group="💰 ניהול סיכון", inline="r1")
+max_trades_in  = input.int(4,    title="עסקאות",      minval=1, maxval=50,              group="💰 ניהול סיכון", inline="r2")
+stop_ticks_in  = input.int(30,   title="סטופ טיקים",  minval=1, maxval=2000,            group="💰 ניהול סיכון", inline="r2")
+rr_ratio_in    = input.float(2.0,title="RR",          minval=1.0, maxval=20, step=0.5,  group="💰 ניהול סיכון", inline="r2")
+cd_opp         = input.int(4,    title="CD כיוון הפוך", minval=1, maxval=20,            group="💰 ניהול סיכון", inline="r3")
+loss_streak    = input.int(3,    title="הפסדים רצופים → סגור יום", minval=2, maxval=10, group="💰 ניהול סיכון", inline="r3")
+
+// Funded-mode auto-adjustments
+max_loss   = funded_mode ? max_loss_in   * 0.6  : max_loss_in    // 60% of eval
+max_profit = funded_mode ? max_profit_in * 0.5  : max_profit_in  // smaller daily targets
+max_trades = funded_mode ? int(math.max(2, max_trades_in - 1)) : max_trades_in
+stop_ticks = funded_mode ? int(stop_ticks_in * 0.8) : stop_ticks_in  // tighter SL
+rr_ratio   = funded_mode ? math.max(1.5, rr_ratio_in - 0.5) : rr_ratio_in
+
+// ══════════════════════════════════════════════════════════════════════════
+// FEATURE A — BREAKEVEN STOP + PARTIAL TP
+// ══════════════════════════════════════════════════════════════════════════
+
+use_partial = input.bool(true, title="🎯 Partial TP @ 1R + BE", group="🎯 Breakeven & Partial", inline="p1", tooltip="ב-1R מוציא 50% רווח וזז SL ל-breakeven. 50% הנותרים רצים ל-2R מלא.")
+partial_pct = input.int(50, title="% לסגור ב-1R", minval=10, maxval=90, step=10, group="🎯 Breakeven & Partial", inline="p1")
+
+// ══════════════════════════════════════════════════════════════════════════
+// FEATURE B — INTRADAY PEAK LOCKOUT
+// ══════════════════════════════════════════════════════════════════════════
+
+use_peak_lock = input.bool(true, title="🛡️ Intraday Peak Lockout", group="🛡️ Peak Lockout", inline="pl1", tooltip="אם הנתת בחזרה X% מה-peak של היום, נועל. מציל trailing drawdown.")
+peak_giveback = input.float(40, title="% נתון בחזרה → נעל", minval=20, maxval=80, step=5, group="🛡️ Peak Lockout", inline="pl1")
+peak_min_pnl  = input.float(200, title="פעיל החל מ-$", minval=50, maxval=1000, step=50, group="🛡️ Peak Lockout", inline="pl1", tooltip="המנגנון מתחיל לעבוד רק אחרי שהיית $X+ ירוק.")
+
+// ══════════════════════════════════════════════════════════════════════════
+// FEATURE C — NEWS BLACKOUT
+// ══════════════════════════════════════════════════════════════════════════
+
+use_news      = input.bool(false, title="📰 News Blackout", group="📰 News Blackout", inline="n1")
+news_times_in = input.string("15:30,15:00,21:00", title="זמני חדשות (HH:MM, מופרד פסיק)", group="📰 News Blackout", inline="n2", tooltip="ברירת מחדל: FOMC 21:00, CPI 15:30, NFP 15:30. הוסף לפי לוח שנה כלכלי.")
+news_buffer   = input.int(15, title="חיץ ± דקות", minval=5, maxval=60, group="📰 News Blackout", inline="n2")
+
+// ══════════════════════════════════════════════════════════════════════════
+// FEATURE D — AUTO-SCALING CONTRACTS
+// ══════════════════════════════════════════════════════════════════════════
+
+use_scaling     = input.bool(false, title="📈 Auto-Scaling Contracts", group="📈 Scaling", inline="sc1", tooltip="עולה ל-2 חוזים אחרי +$X רווח. ל-3 אחרי +$Y. חוזר ל-1 אחרי הפסד.")
+scale_step_pnl  = input.float(300, title="$ להעלאת קומה", minval=100, maxval=2000, step=50, group="📈 Scaling", inline="sc1")
+scale_max       = input.int(3, title="חוזים מקסימום", minval=1, maxval=10, group="📈 Scaling", inline="sc1")
+
+// ══════════════════════════════════════════════════════════════════════════
+// DAYS
+// ══════════════════════════════════════════════════════════════════════════
+
+use_sun = input.bool(true,  title="א׳", group="🗓️ ימים + היפוך", inline="days")
+use_mon = input.bool(true,  title="ב׳", group="🗓️ ימים + היפוך", inline="days")
+use_tue = input.bool(true,  title="ג׳", group="🗓️ ימים + היפוך", inline="days")
+use_wed = input.bool(true,  title="ד׳", group="🗓️ ימים + היפוך", inline="days")
+use_thu = input.bool(true,  title="ה׳", group="🗓️ ימים + היפוך", inline="days")
+use_fri = input.bool(false, title="ו׳", group="🗓️ ימים + היפוך", inline="days")
+use_sat = input.bool(false, title="ש׳", group="🗓️ ימים + היפוך", inline="days")
+ind_rev = input.bool(false, title="🔄 היפוך",  group="🗓️ ימים + היפוך", inline="days")
+
+// ══════════════════════════════════════════════════════════════════════════
+// INDICATORS
+// ══════════════════════════════════════════════════════════════════════════
+
+use_stoch  = input.bool(true,  title="STOCH",   group="📡 OR אינדיקטורים", inline="or1")
+use_bb     = input.bool(true,  title="BB",      group="📡 OR אינדיקטורים", inline="or1")
+use_macd   = input.bool(true,  title="MACD",    group="📡 OR אינדיקטורים", inline="or1")
+use_vwap   = input.bool(true,  title="VWAP",    group="📡 OR אינדיקטורים", inline="or1")
+use_rsi    = input.bool(false, title="RSI",     group="📡 OR אינדיקטורים", inline="or2")
+use_vol    = input.bool(false, title="VOL",     group="📡 OR אינדיקטורים", inline="or2")
+
+show_sl_tp  = input.bool(true,      title="📏 SL/TP",  group="🎨 ויזואל", inline="vis")
+show_bg     = input.bool(true,      title="🎨 רקע",    group="🎨 ויזואל", inline="vis")
+show_labels = input.bool(true,      title="🏷️ תוויות", group="🎨 ויזואל", inline="vis")
+show_stats  = input.bool(true,      title="📊 פאנל",   group="🎨 ויזואל", inline="vis")
+label_size  = input.string("small", title="גודל", options=["tiny","small","normal","large"], group="🎨 ויזואל", inline="vis2")
+line_len    = input.int(40,         title="אורך קווים", minval=5, maxval=200, group="🎨 ויזואל", inline="vis2")
+
+tp_token  = input.string("YOUR_TOKEN_HERE", title="Token",    group="🔗 TraderPost")
+tp_ticker = input.string("NQ1!",            title="Ticker",   group="🔗 TraderPost")
+
+rsi_src = input.source(close, title="Source", group="[ RSI ] L14 OS30 OB70", inline="rsi")
+rsi_len = input.int(14, title="Length", minval=1, group="[ RSI ] L14 OS30 OB70", inline="rsi")
+rsi_os  = input.int(30, title="OS", minval=0,  maxval=50,  group="[ RSI ] L14 OS30 OB70", inline="rsi")
+rsi_ob  = input.int(70, title="OB", minval=50, maxval=100, group="[ RSI ] L14 OS30 OB70", inline="rsi")
+
+bb_src = input.source(close, title="Source", group="[ BB ] L18", inline="bb")
+bb_len = input.int(18,    title="Length", minval=1, group="[ BB ] L18", inline="bb")
+bb_std = input.float(2.0, title="StDev",  minval=0.1, step=0.1, group="[ BB ] L18", inline="bb")
+
+vw_src = input.source(close, title="Source", group="[ VWAP ] יומי", inline="vwap")
+
+ma_src  = input.source(close, title="Source", group="[ MACD ] F12 S26 Sig9", inline="macd")
+ma_fast = input.int(12, title="Fast",   minval=1, group="[ MACD ] F12 S26 Sig9", inline="macd")
+ma_slow = input.int(26, title="Slow",   minval=1, group="[ MACD ] F12 S26 Sig9", inline="macd")
+ma_sig  = input.int(9,  title="Signal", minval=1, group="[ MACD ] F12 S26 Sig9", inline="macd")
+
+stoch_k  = input.int(6,  title="K",  minval=1, group="[ STOCH ] K6 Ks1 (cross 50)", inline="stoch")
+stoch_ks = input.int(1,  title="Ks", minval=1, group="[ STOCH ] K6 Ks1 (cross 50)", inline="stoch")
+
+vol_ma_len = input.int(20, title="VOL MA", minval=1, group="[ VOL ] Crossover", inline="vol")
+
+// ══════════════════════════════════════════════════════════════════════════
+// SESSION & TIME
+// ══════════════════════════════════════════════════════════════════════════
+
+tz        = "Asia/Jerusalem"
+dow       = dayofweek(time, tz)
+isWeekday = dow != dayofweek.saturday
+inS1      = use_s1 and isWeekday and not na(time("1", sess1, tz))
+inS2      = use_s2 and isWeekday and not na(time("1", sess2, tz))
+inSession = inS1 or inS2
+
+h           = hour(time, tz)
+mn          = minute(time, tz)
+hm          = h * 100 + mn
+close_h_val = int(str.tonumber(str.substring(close_time, 0, 2)))
+close_m_val = int(str.tonumber(str.substring(close_time, 3, 5)))
+close_hm    = close_h_val * 100 + close_m_val
+
+// Last-N-bar guard
+sess1_end_h   = int(str.tonumber(str.substring(sess1, 5, 7)))
+sess1_end_m   = int(str.tonumber(str.substring(sess1, 7, 9)))
+sess1_end_min = sess1_end_h * 60 + sess1_end_m
+sess2_end_h   = int(str.tonumber(str.substring(sess2, 5, 7)))
+sess2_end_m   = int(str.tonumber(str.substring(sess2, 7, 9)))
+sess2_end_min = sess2_end_h * 60 + sess2_end_m
+cur_min       = h * 60 + mn
+inLastBars    = (inS1 and (sess1_end_min - cur_min) / 15 > 0 and (sess1_end_min - cur_min) / 15 <= last_bar_guard) or
+                (inS2 and (sess2_end_min - cur_min) / 15 > 0 and (sess2_end_min - cur_min) / 15 <= last_bar_guard)
+
+// ══════════════════════════════════════════════════════════════════════════
+// NEWS BLACKOUT — parse comma-separated HH:MM list
+// ══════════════════════════════════════════════════════════════════════════
+
+inNewsBlackout = false
+if use_news
+    news_arr = str.split(news_times_in, ",")
+    for i = 0 to array.size(news_arr) - 1
+        slot = str.replace_all(array.get(news_arr, i), " ", "")
+        if str.length(slot) >= 4 and str.contains(slot, ":")
+            parts = str.split(slot, ":")
+            if array.size(parts) == 2
+                nh = int(str.tonumber(array.get(parts, 0)))
+                nm = int(str.tonumber(array.get(parts, 1)))
+                if not na(nh) and not na(nm)
+                    news_min = nh * 60 + nm
+                    if math.abs(cur_min - news_min) <= news_buffer
+                        inNewsBlackout := true
+
+// ══════════════════════════════════════════════════════════════════════════
+// DAILY RISK STATE + INTRADAY PEAK
+// ══════════════════════════════════════════════════════════════════════════
+
+isNewDay = ta.change(time("D")) != 0
+
+var float dayEq         = strategy.equity
+var int   dayCnt        = 0
+var int   lastEntryBar  = -999
+var int   lastEntryDir  = 0
+var int   consecLosses  = 0
+var float lastClosedEq  = strategy.equity
+var bool  dayLocked     = false
+var float dayPeak       = 0.0          // intraday equity peak (cents above dayEq)
+var int   curContracts  = 1
+var float lastTradeEntry= 0.0
+
+if isNewDay
+    dayEq        := strategy.equity
+    dayCnt       := 0
+    lastEntryBar := -999
+    lastEntryDir := 0
+    consecLosses := 0
+    dayLocked    := false
+    lastClosedEq := strategy.equity
+    dayPeak      := 0.0
+    curContracts := contracts_base
+
+dailyPnL = strategy.equity - dayEq
+
+// Track peak
+if dailyPnL > dayPeak
+    dayPeak := dailyPnL
+
+// Feature B — Intraday Peak Lockout
+peakGiveback   = dayPeak > 0 ? (dayPeak - dailyPnL) / dayPeak * 100 : 0.0
+peakLockHit    = use_peak_lock and dayPeak >= peak_min_pnl and peakGiveback >= peak_giveback
+if peakLockHit
+    dayLocked := true
+
+// Closed-trade tracking → loss streak + scaling
+if strategy.closedtrades > strategy.closedtrades[1]
+    lastTradePnL = strategy.closedtrades.profit(strategy.closedtrades - 1)
+    if lastTradePnL < 0
+        consecLosses := consecLosses + 1
+        if use_scaling
+            curContracts := contracts_base  // reset to base on any loss
+    else
+        consecLosses := 0
+    if consecLosses >= loss_streak
+        dayLocked := true
+
+// Feature D — Auto-scaling
+if use_scaling and not isNewDay
+    target_size = contracts_base + int(math.floor(dailyPnL / scale_step_pnl))
+    target_size := math.max(contracts_base, math.min(scale_max, target_size))
+    // Only grow on positive PnL, never shrink mid-day via scaling (losses already reset above)
+    if target_size > curContracts and dailyPnL > 0
+        curContracts := target_size
+
+contracts_now = use_scaling ? curContracts : contracts_base
+
+dailyLossOk   = dailyPnL > -math.abs(max_loss)
+dailyProfitOk = dailyPnL <  math.abs(max_profit)
+tradesOk      = dayCnt   < max_trades
+streakOk      = not dayLocked
+
+dayOk = (dow == dayofweek.sunday    and use_sun) or
+        (dow == dayofweek.monday    and use_mon) or
+        (dow == dayofweek.tuesday   and use_tue) or
+        (dow == dayofweek.wednesday and use_wed) or
+        (dow == dayofweek.thursday  and use_thu) or
+        (dow == dayofweek.friday    and use_fri) or
+        (dow == dayofweek.saturday  and use_sat)
+
+baseOk         = inSession and dailyLossOk and dailyProfitOk and tradesOk and dayOk
+                 and streakOk and not inLastBars and not inNewsBlackout
+                 and strategy.position_size == 0
+barsSinceEntry = bar_index - lastEntryBar
+
+// ══════════════════════════════════════════════════════════════════════════
+// INDICATORS — clean single-asset only
+// ══════════════════════════════════════════════════════════════════════════
+
+rsiVal   = ta.rsi(rsi_src, rsi_len)
+rsiLong  = rsiVal <= rsi_os
+rsiShort = rsiVal >= rsi_ob
+
+[bbMid, bbUp, bbDn] = ta.bb(bb_src, bb_len, bb_std)
+bbLong  = ta.crossunder(close, bbMid) and inSession and inSession[1]
+bbShort = ta.crossover(close,  bbMid) and inSession and inSession[1]
+
+vwapVal   = ta.vwap(vw_src)
+vwapLong  = ta.crossunder(close, vwapVal) and inSession and inSession[1]
+vwapShort = ta.crossover(close,  vwapVal) and inSession and inSession[1]
+
+[_macdLine, _sigLine, macdHist] = ta.macd(ma_src, ma_fast, ma_slow, ma_sig)
+macdLong  = ta.crossover(macdHist,  0) and inSession and inSession[1]
+macdShort = ta.crossunder(macdHist, 0) and inSession and inSession[1]
+
+stochK     = ta.sma(ta.stoch(close, high, low, stoch_k), stoch_ks)
+stochLong  = ta.crossover(stochK,  50) and inSession and inSession[1]
+stochShort = ta.crossunder(stochK, 50) and inSession and inSession[1]
+
+trueRange    = math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
+trMA         = ta.sma(trueRange, vol_ma_len)
+volSpikeRaw  = (trueRange > trMA) and (trueRange[1] <= trMA[1])
+volSpikeLong = volSpikeRaw and close > open
+volSpikeShort= volSpikeRaw and close < open
+
+// ══════════════════════════════════════════════════════════════════════════
+// STRATEGY LOGIC
+// ══════════════════════════════════════════════════════════════════════════
+
+orLong  = (use_stoch and stochLong)    or (use_bb   and bbLong)   or
+          (use_macd  and macdLong)     or (use_vwap and vwapLong) or
+          (use_rsi   and rsiLong)      or (use_vol  and volSpikeLong)
+
+orShort = (use_stoch and stochShort)   or (use_bb   and bbShort)   or
+          (use_macd  and macdShort)    or (use_vwap and vwapShort) or
+          (use_rsi   and rsiShort)     or (use_vol  and volSpikeShort)
+
+longSig  = ind_rev ? orShort : orLong
+shortSig = ind_rev ? orLong  : orShort
+
+canLong  = baseOk and (lastEntryDir == 0 or lastEntryDir == 1  or (lastEntryDir == -1 and barsSinceEntry >= cd_opp))
+canShort = baseOk and (lastEntryDir == 0 or lastEntryDir == -1 or (lastEntryDir == 1  and barsSinceEntry >= cd_opp))
+
+tick     = syminfo.mintick
+sl_long  = close - stop_ticks * tick
+tp_long  = close + stop_ticks * tick * rr_ratio
+sl_short = close + stop_ticks * tick
+tp_short = close - stop_ticks * tick * rr_ratio
+oneR_long  = close + stop_ticks * tick           // first 1R target for partial
+oneR_short = close - stop_ticks * tick
+
+// Webhook payloads — quantity inside dynamically based on scaling
+qty_str    = str.tostring(contracts_now)
+long_msg   = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"buy","quantity":"'  + qty_str + '","orderType":"market"}'
+short_msg  = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"sell","quantity":"' + qty_str + '","orderType":"market"}'
+close_msg  = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"exit","quantity":"' + qty_str + '","orderType":"market"}'
+
+lblSize = label_size == "tiny" ? size.tiny : label_size == "small" ? size.small : label_size == "large" ? size.large : size.normal
+ind_txt = (use_stoch ? "STOCH " : "") + (use_bb ? "BB " : "") + (use_macd ? "MACD " : "") + (use_vwap ? "VWAP " : "") + (use_rsi ? "RSI " : "") + (use_vol ? "VOL" : "")
+
+// ══════════════════════════════════════════════════════════════════════════
+// ENTRIES (with optional partial + BE)
+// ══════════════════════════════════════════════════════════════════════════
+
+// Partial requires >= 2 contracts (Pine rounds qty_percent of 1 contract to 0 or 1)
+partialActive = use_partial and contracts_now >= 2
+var bool beArmedLong  = false
+var bool beArmedShort = false
+
+if longSig and canLong
+    strategy.entry("Long", strategy.long, qty=contracts_now, comment="🟢 L x" + qty_str, alert_message=long_msg)
+    if partialActive
+        strategy.exit("Partial L", "Long", qty_percent=partial_pct, limit=oneR_long, alert_message=close_msg)
+    strategy.exit("SL/TP L", "Long", stop=sl_long, limit=tp_long, alert_message=close_msg)
+    beArmedLong    := use_partial
+    dayCnt         := dayCnt + 1
+    lastEntryBar   := bar_index
+    lastEntryDir   := 1
+    lastTradeEntry := close
+    if show_labels
+        label.new(bar_index, low, text="▲ L x" + qty_str + "\n@" + str.tostring(math.round(close, 2)) + "\n" + ind_txt,
+             color=color.new(#1565C0, 0), textcolor=color.white, style=label.style_label_up, size=lblSize)
+    if show_sl_tp
+        line.new(bar_index, tp_long, bar_index + line_len, tp_long, color=color.new(#00C853, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        line.new(bar_index, sl_long, bar_index + line_len, sl_long, color=color.new(#EF5350, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        if partialActive
+            line.new(bar_index, oneR_long, bar_index + line_len, oneR_long, color=color.new(#FFB300, 0), width=1, style=line.style_dotted, xloc=xloc.bar_index)
+
+if shortSig and canShort and not (longSig and canLong)
+    strategy.entry("Short", strategy.short, qty=contracts_now, comment="🔴 S x" + qty_str, alert_message=short_msg)
+    if partialActive
+        strategy.exit("Partial S", "Short", qty_percent=partial_pct, limit=oneR_short, alert_message=close_msg)
+    strategy.exit("SL/TP S", "Short", stop=sl_short, limit=tp_short, alert_message=close_msg)
+    beArmedShort   := use_partial
+    dayCnt         := dayCnt + 1
+    lastEntryBar   := bar_index
+    lastEntryDir   := -1
+    lastTradeEntry := close
+    if show_labels
+        label.new(bar_index, high, text="▼ S x" + qty_str + "\n@" + str.tostring(math.round(close, 2)) + "\n" + ind_txt,
+             color=color.new(#B71C1C, 0), textcolor=color.white, style=label.style_label_down, size=lblSize)
+    if show_sl_tp
+        line.new(bar_index, tp_short, bar_index + line_len, tp_short, color=color.new(#00C853, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        line.new(bar_index, sl_short, bar_index + line_len, sl_short, color=color.new(#EF5350, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        if partialActive
+            line.new(bar_index, oneR_short, bar_index + line_len, oneR_short, color=color.new(#FFB300, 0), width=1, style=line.style_dotted, xloc=xloc.bar_index)
+
+// ══════════════════════════════════════════════════════════════════════════
+// BREAKEVEN STOP — once 1R reached, REPLACE the existing SL with entry price
+// (uses the same "SL/TP L"/"SL/TP S" ID so Pine modifies the existing exit
+// rather than creating a third order). Fires once per trade via beArmed*.
+// ══════════════════════════════════════════════════════════════════════════
+
+// Only evaluate BE from the bar AFTER entry — the entry bar's high/low
+// includes price action that occurred BEFORE we filled, which would
+// false-trigger BE immediately.
+if beArmedLong and strategy.position_size > 0 and bar_index > lastEntryBar
+    entry_px = strategy.position_avg_price
+    one_r    = stop_ticks * tick
+    if high >= entry_px + one_r
+        strategy.exit("SL/TP L", "Long", stop=entry_px, limit=tp_long, alert_message=close_msg)
+        beArmedLong := false
+        if show_labels
+            label.new(bar_index, entry_px, text="🔒 BE", color=color.new(#FFB300, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+
+if beArmedShort and strategy.position_size < 0 and bar_index > lastEntryBar
+    entry_px = strategy.position_avg_price
+    one_r    = stop_ticks * tick
+    if low <= entry_px - one_r
+        strategy.exit("SL/TP S", "Short", stop=entry_px, limit=tp_short, alert_message=close_msg)
+        beArmedShort := false
+        if show_labels
+            label.new(bar_index, entry_px, text="🔒 BE", color=color.new(#FFB300, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+
+// Reset BE arming when position flat
+if strategy.position_size == 0
+    beArmedLong  := false
+    beArmedShort := false
+
+// ══════════════════════════════════════════════════════════════════════════
+// FORCED CLOSES
+// ══════════════════════════════════════════════════════════════════════════
+
+closeReason = use_close and hm >= close_hm ? "⏰ סגירה" :
+              not inSession                ? "🏁 סשן"  :
+              not dailyLossOk              ? "❌ הפסד" :
+              not dailyProfitOk            ? "✅ רווח" :
+              dayLocked and not isNewDay   ? (peakLockHit ? "🛡️ Peak Lock" : "🛑 רצף הפסדים") :
+              inNewsBlackout               ? "📰 News" : ""
+
+if closeReason != "" and strategy.position_size != 0
+    strategy.close_all(comment=closeReason, alert_message=close_msg)
+
+// ══════════════════════════════════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════════════════════════════════
+
+bgcolor(show_bg and inS1                   ? color.new(#2196F3, 93) : na)
+bgcolor(show_bg and inS2                   ? color.new(#4CAF50, 93) : na)
+bgcolor(show_bg and inNewsBlackout         ? color.new(#FF5722, 80) : na)
+bgcolor(show_bg and inLastBars and inSession ? color.new(#9E9E9E, 85) : na)
+plot(bbUp,     "BB Upper", color.new(#2196F3, 30), linewidth=1)
+plot(bbMid,    "BB Mid",   color.new(#FF9800,  0), linewidth=2)
+plot(bbDn,     "BB Lower", color.new(#2196F3, 30), linewidth=1)
+plot(vwapVal,  "VWAP",     color.new(#4CAF50,  0), linewidth=2)
+plot(macdHist, "MACD Hist", color=macdHist >= 0 ? color.new(#00E676, 0) : color.new(#EF5350, 0), style=plot.style_columns)
+plotshape(longSig  and canLong,                               title="LONG",  location=location.belowbar, color=color.new(#00C853, 0), style=shape.triangleup,   size=size.small, text="L")
+plotshape(shortSig and canShort and not(longSig and canLong), title="SHORT", location=location.abovebar, color=color.new(#EF5350, 0), style=shape.triangledown, size=size.small, text="S")
+
+// ══════════════════════════════════════════════════════════════════════════
+// LIVE STATS PANEL
+// ══════════════════════════════════════════════════════════════════════════
+
+var table stats = table.new(position.top_right, 2, 9, border_width=1)
+if show_stats and barstate.islast
+    pnl_color = dailyPnL >= 0 ? color.new(#00C853, 20) : color.new(#EF5350, 20)
+    mode_lbl  = funded_mode ? "💎 FUNDED" : "🎯 EVAL"
+    mode_bg   = funded_mode ? color.new(#9C27B0, 30) : color.new(#1565C0, 30)
+    table.cell(stats, 0, 0, "ProfitBot v3.4 PK", text_color=color.white, bgcolor=mode_bg, text_size=size.small)
+    table.cell(stats, 1, 0, mode_lbl,            text_color=color.white, bgcolor=mode_bg, text_size=size.small)
+    table.cell(stats, 0, 1, "PnL היום", text_size=size.small)
+    table.cell(stats, 1, 1, "$" + str.tostring(math.round(dailyPnL, 0)), bgcolor=pnl_color, text_color=color.white, text_size=size.small)
+    table.cell(stats, 0, 2, "Peak / Giveback", text_size=size.small)
+    table.cell(stats, 1, 2, "$" + str.tostring(math.round(dayPeak, 0)) + "  ↓" + str.tostring(math.round(peakGiveback, 0)) + "%",
+        bgcolor=peakGiveback >= peak_giveback * 0.7 ? color.new(#FF9800, 50) : na, text_size=size.small)
+    table.cell(stats, 0, 3, "עסקאות", text_size=size.small)
+    table.cell(stats, 1, 3, str.tostring(dayCnt) + " / " + str.tostring(max_trades), text_size=size.small)
+    table.cell(stats, 0, 4, "חוזים עכשיו", text_size=size.small)
+    table.cell(stats, 1, 4, str.tostring(contracts_now) + (use_scaling ? "  📈" : ""), text_size=size.small)
+    table.cell(stats, 0, 5, "רצף הפסדים", text_size=size.small)
+    table.cell(stats, 1, 5, str.tostring(consecLosses) + " / " + str.tostring(loss_streak),
+        bgcolor=consecLosses >= loss_streak - 1 ? color.new(#EF5350, 40) : na, text_size=size.small)
+    table.cell(stats, 0, 6, "Risk/Trade", text_size=size.small)
+    table.cell(stats, 1, 6, "$" + str.tostring(math.round(stop_ticks * tick * syminfo.pointvalue * contracts_now, 0)), text_size=size.small)
+    table.cell(stats, 0, 7, "סשן", text_size=size.small)
+    table.cell(stats, 1, 7, inS1 ? "A 08-12" : inS2 ? "B 13-16" : "—",
+        bgcolor=inSession ? color.new(#4CAF50, 70) : color.new(#EF5350, 70), text_size=size.small)
+    table.cell(stats, 0, 8, "סטטוס", text_size=size.small)
+    status_txt = peakLockHit ? "🛡️ Peak Lock" :
+                 dayLocked   ? "🛑 נעול" :
+                 not dailyLossOk   ? "❌ הפסד" :
+                 not dailyProfitOk ? "✅ רווח" :
+                 inNewsBlackout    ? "📰 News" :
+                 inLastBars        ? "⏰ סוף סשן" :
+                 baseOk            ? "🟢 פעיל" : "⚪ ממתין"
+    table.cell(stats, 1, 8, status_txt, text_size=size.small)
+
+// ══════════════════════════════════════════════════════════════════════════
+// DATA WINDOW EXPORT
+// ══════════════════════════════════════════════════════════════════════════
+
+plot(dayofweek(time, tz),  "DOW",             display=display.data_window)
+plot(dailyPnL,             "Daily PnL",       display=display.data_window)
+plot(dayPeak,              "Day Peak",        display=display.data_window)
+plot(peakGiveback,         "Peak Giveback %", display=display.data_window)
+plot(contracts_now,        "Contracts Now",   display=display.data_window)
+plot(consecLosses,         "Loss Streak",     display=display.data_window)
+plot(dayLocked    ? 1 : 0, "Day Locked",      display=display.data_window)
+plot(inLastBars   ? 1 : 0, "Last-Bar Guard",  display=display.data_window)
+plot(inNewsBlackout ? 1:0, "News Blackout",   display=display.data_window)
+plot(funded_mode ? 1 : 0,  "Funded Mode",     display=display.data_window)

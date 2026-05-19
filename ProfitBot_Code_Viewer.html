@@ -124,10 +124,8 @@ ma_fast = input.int(12, title="Fast",   minval=1, group="[ MACD ] ✅ F12 S26 Si
 ma_slow = input.int(26, title="Slow",   minval=1, group="[ MACD ] ✅ F12 S26 Sig9", inline="macd")
 ma_sig  = input.int(9,  title="Signal", minval=1, group="[ MACD ] ✅ F12 S26 Sig9", inline="macd")
 
-stoch_k  = input.int(6,  title="K",  minval=1, group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
-stoch_ks = input.int(1,  title="Ks", minval=1, group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
-stoch_ob = input.int(70, title="OB", minval=50, maxval=100, group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
-stoch_os = input.int(30, title="OS", minval=0,  maxval=50,  group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
+stoch_k  = input.int(6,  title="K",  minval=1, group="[ STOCH ] ✅ K6 Ks1 (cross 50)", inline="stoch")
+stoch_ks = input.int(1,  title="Ks", minval=1, group="[ STOCH ] ✅ K6 Ks1 (cross 50)", inline="stoch")
 
 div_src = input.source(close, title="Source",   group="[ RSI DIV ]", inline="div")
 div_len = input.int(14, title="Length",   minval=1,           group="[ RSI DIV ]", inline="div")
@@ -203,15 +201,6 @@ baseOk         = inSession and dailyLossOk and dailyProfitOk and tradesOk and da
 barsSinceEntry = bar_index - lastEntryBar
 
 // ══════════════════════════════════════════════════════════════════════════
-// ⚠️ ולידציה
-// ══════════════════════════════════════════════════════════════════════════
-
-tickValue       = syminfo.mintick * syminfo.pointvalue
-maxLossPerTrade = stop_ticks * tickValue * contracts
-
-// ✅ ולידציה הוסרה — חופשי לשים כל SL/TP
-
-// ══════════════════════════════════════════════════════════════════════════
 // INDICATORS
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -240,9 +229,11 @@ rsiDiv  = ta.rsi(div_src, div_len)
 bullDiv = low  < ta.lowest(low,   div_lb)[1] and rsiDiv > ta.lowest(rsiDiv,  div_lb)[1]
 bearDiv = high > ta.highest(high, div_lb)[1] and rsiDiv < ta.highest(rsiDiv, div_lb)[1]
 
-trueRange = math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
-trMA      = ta.sma(trueRange, vol_ma_len)
-volSpike  = (trueRange > trMA) and (trueRange[1] <= trMA[1])
+trueRange    = math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
+trMA         = ta.sma(trueRange, vol_ma_len)
+volSpikeRaw  = (trueRange > trMA) and (trueRange[1] <= trMA[1])
+volSpikeLong = volSpikeRaw and close > open
+volSpikeShort= volSpikeRaw and close < open
 
 [c_6e, h_6e, l_6e]    = request.security(im_6e,    timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
 [c_6b, h_6b, l_6b]    = request.security(im_6b,    timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
@@ -349,17 +340,17 @@ regimeOk = not use_regime or adxVal >= regime_adx
 // STRATEGY LOGIC
 // ══════════════════════════════════════════════════════════════════════════
 
-orLong  = (use_stoch and stochLong)  or (use_bb    and bbLong)   or
-          (use_macd  and macdLong)   or (use_vwap  and vwapLong) or
-          (use_rsi   and rsiLong)    or (use_rsidiv and bullDiv)  or
-          (use_vol   and volSpike)   or (use_smt   and smtBull)  or
-          (use_im    and imLong)     or (use_psp   and pspBull)
+orLong  = (use_stoch and stochLong)     or (use_bb    and bbLong)   or
+          (use_macd  and macdLong)      or (use_vwap  and vwapLong) or
+          (use_rsi   and rsiLong)       or (use_rsidiv and bullDiv)  or
+          (use_vol   and volSpikeLong)  or (use_smt   and smtBull)  or
+          (use_im    and imLong)        or (use_psp   and pspBull)
 
-orShort = (use_stoch and stochShort) or (use_bb    and bbShort)   or
-          (use_macd  and macdShort)  or (use_vwap  and vwapShort) or
-          (use_rsi   and rsiShort)   or (use_rsidiv and bearDiv)  or
-          (use_vol   and volSpike)   or (use_smt   and smtBear)  or
-          (use_im    and imShort)    or (use_psp   and pspBear)
+orShort = (use_stoch and stochShort)    or (use_bb    and bbShort)   or
+          (use_macd  and macdShort)     or (use_vwap  and vwapShort) or
+          (use_rsi   and rsiShort)      or (use_rsidiv and bearDiv)  or
+          (use_vol   and volSpikeShort) or (use_smt   and smtBear)  or
+          (use_im    and imShort)       or (use_psp   and pspBear)
 
 longSig  = ind_rev ? orShort : orLong
 shortSig = ind_rev ? orLong  : orShort
@@ -595,7 +586,9 @@ plot(stoch_long_bits,                      "STOCH Long Bits",   display=display.
 plot(stoch_short_bits,                     "STOCH Short Bits",  display=display.data_window)
 plot(ta.crossunder(close,vwapVal) ? 1 : 0, "VWAP Long",         display=display.data_window)
 plot(ta.crossover(close, vwapVal) ? 1 : 0, "VWAP Short",        display=display.data_window)
-plot(volSpike ? 1 : 0,                     "VOL Spike",         display=display.data_window)
+plot(volSpikeRaw   ? 1 : 0,                "VOL Spike",         display=display.data_window)
+plot(volSpikeLong  ? 1 : 0,                "VOL Spike Long",    display=display.data_window)
+plot(volSpikeShort ? 1 : 0,                "VOL Spike Short",   display=display.data_window)
 plot(bullDiv  ? 1 : 0,                     "RSI DIV Bull",      display=display.data_window)
 plot(bearDiv  ? 1 : 0,                     "RSI DIV Bear",      display=display.data_window)
 plot(smtBull  ? 1 : 0,                     "SMT Bull",          display=display.data_window)

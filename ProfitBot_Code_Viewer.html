@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProfitBot Jerusalem v3.2</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050a05;color:#b8f0b8;font-family:'Courier New',monospace;font-size:11px;padding:10px}
+.hdr{background:#090f09;border:1px solid #005a14;border-radius:4px;padding:12px;margin-bottom:10px;text-align:center}
+.hdr h1{color:#00ff41;font-size:14px;letter-spacing:2px}
+.hdr p{color:#3d6b3d;font-size:9px;margin-top:4px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.btn{padding:14px;border:1px solid #00cc33;color:#00ff41;font-size:13px;font-weight:700;cursor:pointer;border-radius:4px;font-family:'Courier New',monospace;letter-spacing:1px;text-align:center}
+.btn-copy{background:#005a14}
+.btn-sel{background:#003a0c}
+.btn:active{background:#00cc33;color:#000}
+.btn.ok{background:#00cc33;color:#000}
+.note{color:#ffb300;font-size:10px;text-align:center;margin-bottom:8px}
+.badge{background:rgba(0,255,65,.1);border:1px solid #005a14;color:#00cc33;font-size:9px;padding:3px 8px;border-radius:2px;display:inline-block;margin-bottom:8px}
+.code-box{background:#090f09;border:1px solid #152015;border-radius:4px;padding:10px;white-space:pre;overflow-x:auto;line-height:1.5;font-size:10px;max-height:65vh;overflow-y:auto;direction:ltr;text-align:left;user-select:all}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <h1>⚡ PROFITBOT | JERUSALEM v3.2</h1>
+  <p>NQ1! · 15MIN · PROP FIRM · TRADERPOST WEBHOOK</p>
+</div>
+<div style="text-align:center">
+  <div class="badge">✅ ולידציה הוסרה — חופשי לשים כל SL/TP</div>
+  <div class="badge" style="margin-right:6px">✅ תיקון בר פתיחת סשן</div>
+</div>
+<div class="note">לחץ על כפתור ← הדבק ב-TradingView Pine Editor</div>
+<div class="btns">
+  <button class="btn btn-copy" id="btn-copy" onclick="copyCode()">📋 העתק הכל</button>
+  <button class="btn btn-sel"  id="btn-sel"  onclick="selCode()">🖱 בחר הכל</button>
+</div>
+<div class="code-box" id="code"></div>
+<script>
+const code = `//@version=5
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║              ProfitBot | Jerusalem v3.2 — Full Source                   ║
+// ║              NQ1! · 15min · Prop Firm · TraderPost Webhook              ║
+// ╠══════════════════════════════════════════════════════════════════════════╣
+// ║  BB    = Length=18, Source=close, crossunder/crossover bbMid ✅          ║
+// ║  STOCH = K=6, Ks=1, crossover/crossunder 50 ✅                          ║
+// ║  MACD  = Fast=12, Slow=26, Sig=9, crossover/crossunder 0 ✅             ║
+// ║  RSI   = Length=14, OS=30, OB=70, מצב נמשך ✅                           ║
+// ║  VWAP  = Source=close, יומי, crossunder/crossover ✅                    ║
+// ║  VOL   = TrueRange crossover MA ✅                                       ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+strategy("ProfitBot | Jerusalem v3.2", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1, currency=currency.USD, initial_capital=10000, commission_type=strategy.commission.cash_per_contract, commission_value=2, max_labels_count=500, max_lines_count=500, process_orders_on_close=true)
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════════════════════════════════
+
+use_s1     = input.bool(true,  title="✅ סשן 1", group="🕐 סשנים", inline="s1")
+sess1      = input.session("0400-0800", title="שעות", group="🕐 סשנים", inline="s1")
+use_s2     = input.bool(false, title="✅ סשן 2", group="🕐 סשנים", inline="s2")
+sess2      = input.session("1200-1600", title="שעות", group="🕐 סשנים", inline="s2")
+use_close  = input.bool(true,  title="✅ סגירה", group="⏰ סגירה", inline="cl")
+close_time = input.string("08:00", title="🕐", group="⏰ סגירה", inline="cl", options=["00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"])
+
+contracts  = input.int(1,     title="חוזים",       minval=1, maxval=100,              group="💰 ניהול סיכון", inline="r1")
+max_loss   = input.float(500, title="הפסד יומי $",  minval=0,                         group="💰 ניהול סיכון", inline="r1")
+max_profit = input.float(500, title="רווח יומי $",  minval=0,                         group="💰 ניהול סיכון", inline="r1")
+max_trades = input.int(6,     title="עסקאות",       minval=1, maxval=50,              group="💰 ניהול סיכון", inline="r2")
+stop_ticks = input.int(50,    title="סטופ טיקים",   minval=1, maxval=2000,            group="💰 ניהול סיכון", inline="r2")
+rr_ratio   = input.float(2.0, title="RR",            minval=1.0, maxval=20, step=0.5, group="💰 ניהול סיכון", inline="r2")
+cd_opp     = input.int(2,     title="CD כיוון הפוך", minval=1, maxval=20,             group="💰 ניהול סיכון", inline="r2")
+use_trail  = input.bool(false, title="🔁 Trailing Stop", group="💰 ניהול סיכון", inline="trail")
+trail_atr  = input.int(14,    title="ATR",   minval=1, maxval=50,            group="💰 ניהול סיכון", inline="trail")
+trail_mult = input.float(1.5, title="מכפיל", minval=0.5, maxval=5, step=0.5, group="💰 ניהול סיכון", inline="trail")
+
+use_sun    = input.bool(true,  title="א׳", group="🗓️ ימים + היפוך", inline="days")
+use_mon    = input.bool(true,  title="ב׳", group="🗓️ ימים + היפוך", inline="days")
+use_tue    = input.bool(true,  title="ג׳", group="🗓️ ימים + היפוך", inline="days")
+use_wed    = input.bool(true,  title="ד׳", group="🗓️ ימים + היפוך", inline="days")
+use_thu    = input.bool(true,  title="ה׳", group="🗓️ ימים + היפוך", inline="days")
+use_fri    = input.bool(false, title="ו׳", group="🗓️ ימים + היפוך", inline="days")
+use_sat    = input.bool(false, title="ש׳", group="🗓️ ימים + היפוך", inline="days")
+ind_rev    = input.bool(false, title="🔄 היפוך",  group="🗓️ ימים + היפוך", inline="days")
+use_dna    = input.bool(false, title="🧬 DNA נר",  group="🗓️ ימים + היפוך", inline="dna")
+dna_body   = input.float(0.3,  title="גוף מינ׳",   minval=0.1, maxval=0.9, step=0.1, group="🗓️ ימים + היפוך", inline="dna")
+use_regime = input.bool(false, title="📊 Regime",  group="🗓️ ימים + היפוך", inline="regime")
+regime_adx = input.int(20,     title="ADX מינ׳",   minval=10, maxval=50, group="🗓️ ימים + היפוך", inline="regime")
+
+use_stoch  = input.bool(true,  title="STOCH",   group="📡 OR אינדיקטורים", inline="or1")
+use_bb     = input.bool(true,  title="BB",      group="📡 OR אינדיקטורים", inline="or1")
+use_macd   = input.bool(false, title="MACD",    group="📡 OR אינדיקטורים", inline="or1")
+use_vwap   = input.bool(false, title="VWAP",    group="📡 OR אינדיקטורים", inline="or1")
+use_rsi    = input.bool(false, title="RSI",     group="📡 OR אינדיקטורים", inline="or2")
+use_rsidiv = input.bool(false, title="RSI DIV", group="📡 OR אינדיקטורים", inline="or2")
+use_vol    = input.bool(false, title="VOL",     group="📡 OR אינדיקטורים", inline="or2")
+use_smt    = input.bool(false, title="SMT",     group="📡 OR אינדיקטורים", inline="or3")
+use_im     = input.bool(false, title="IM",      group="📡 OR אינדיקטורים", inline="or3")
+use_psp    = input.bool(false, title="PSP",     group="📡 OR אינדיקטורים", inline="or3")
+
+show_sl_tp  = input.bool(true,      title="📏 SL/TP",  group="🎨 ויזואל", inline="vis")
+show_bg     = input.bool(true,      title="🎨 רקע",    group="🎨 ויזואל", inline="vis")
+show_labels = input.bool(true,      title="🏷️ תוויות", group="🎨 ויזואל", inline="vis")
+label_size  = input.string("small", title="גודל", options=["tiny","small","normal","large"], group="🎨 ויזואל", inline="vis2")
+line_len    = input.int(40,         title="אורך קווים", minval=5, maxval=200, group="🎨 ויזואל", inline="vis2")
+
+tp_token  = input.string("YOUR_TOKEN_HERE", title="Token",    group="🔗 TraderPost")
+tp_ticker = input.string("NQ1!",            title="Ticker",   group="🔗 TraderPost")
+tp_qty    = input.int(1,                    title="Quantity", minval=1, group="🔗 TraderPost")
+
+rsi_src = input.source(close, title="Source", group="[ RSI ] ✅ L14 OS30 OB70", inline="rsi")
+rsi_len = input.int(14, title="Length", minval=1, group="[ RSI ] ✅ L14 OS30 OB70", inline="rsi")
+rsi_os  = input.int(30, title="OS", minval=0,  maxval=50,  group="[ RSI ] ✅ L14 OS30 OB70", inline="rsi")
+rsi_ob  = input.int(70, title="OB", minval=50, maxval=100, group="[ RSI ] ✅ L14 OS30 OB70", inline="rsi")
+
+bb_src = input.source(close, title="Source", group="[ BB ] ✅ L18", inline="bb")
+bb_len = input.int(18,    title="Length", minval=1, group="[ BB ] ✅ L18", inline="bb")
+bb_std = input.float(2.0, title="StDev",  minval=0.1, step=0.1, group="[ BB ] ✅ L18", inline="bb")
+
+vw_src = input.source(close, title="Source", group="[ VWAP ] ✅ יומי", inline="vwap")
+
+ma_src  = input.source(close, title="Source", group="[ MACD ] ✅ F12 S26 Sig9", inline="macd")
+ma_fast = input.int(12, title="Fast",   minval=1, group="[ MACD ] ✅ F12 S26 Sig9", inline="macd")
+ma_slow = input.int(26, title="Slow",   minval=1, group="[ MACD ] ✅ F12 S26 Sig9", inline="macd")
+ma_sig  = input.int(9,  title="Signal", minval=1, group="[ MACD ] ✅ F12 S26 Sig9", inline="macd")
+
+stoch_k  = input.int(6,  title="K",  minval=1, group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
+stoch_ks = input.int(1,  title="Ks", minval=1, group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
+stoch_ob = input.int(70, title="OB", minval=50, maxval=100, group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
+stoch_os = input.int(30, title="OS", minval=0,  maxval=50,  group="[ STOCH ] ✅ K6 Ks1", inline="stoch")
+
+div_src = input.source(close, title="Source",   group="[ RSI DIV ]", inline="div")
+div_len = input.int(14, title="Length",   minval=1,           group="[ RSI DIV ]", inline="div")
+div_lb  = input.int(3,  title="Lookback", minval=1, maxval=20, group="[ RSI DIV ]", inline="div")
+
+vol_ma_len = input.int(20, title="VOL MA", minval=1, group="[ VOL ] ✅ Crossover", inline="vol")
+
+smt_sym1    = input.symbol("NQ1!", title="נכס 1", group="[ SMT ] ⭐", inline="smt1")
+smt_sym2    = input.symbol("ES1!", title="נכס 2", group="[ SMT ] ⭐", inline="smt1")
+smt_pivot_l = input.int(2, title="Pivot L", minval=1, maxval=50, group="[ SMT ] ⭐", inline="smt2")
+smt_pivot_r = input.int(1, title="Pivot R", minval=1, maxval=20, group="[ SMT ] ⭐", inline="smt2")
+
+im_6e      = input.symbol("6E1!", title="6E",  group="[ IM ] 🌍", inline="im1")
+im_6b      = input.symbol("6B1!", title="6B",  group="[ IM ] 🌍", inline="im1")
+im_dxy     = input.symbol("DXY",  title="DXY", group="[ IM ] 🌍", inline="im1")
+im_zb      = input.symbol("ZB1!", title="ZB",  group="[ IM ] 🌍", inline="im2")
+im_zb_corr = input.float(0.5, title="קורלציה ZB", minval=0.0, maxval=1.0, step=0.05, group="[ IM ] 🌍", inline="im2")
+im_corr_l  = input.int(50, title="אורך", minval=10, maxval=200, group="[ IM ] 🌍", inline="im2")
+im_pivot_l = input.int(2,  title="Pivot L", minval=1, maxval=50, group="[ IM ] 🌍", inline="im3")
+im_pivot_r = input.int(1,  title="Pivot R", minval=1, maxval=20, group="[ IM ] 🌍", inline="im3")
+
+psp_sym1    = input.symbol("NQ1!", title="NQ", group="[ PSP ] 💎", inline="psp1")
+psp_sym2    = input.symbol("ES1!", title="ES", group="[ PSP ] 💎", inline="psp1")
+psp_sym3    = input.symbol("YM1!", title="YM", group="[ PSP ] 💎", inline="psp1")
+psp_corr    = input.float(0.3, title="קורלציה", minval=0.0, maxval=1.0, step=0.05, group="[ PSP ] 💎", inline="psp1")
+psp_corr_l  = input.int(50, title="אורך", minval=10, maxval=200, group="[ PSP ] 💎", inline="psp1")
+psp_pivot_l = input.int(2,  title="Pivot L", minval=1, maxval=50, group="[ PSP ] 💎", inline="psp2")
+psp_pivot_r = input.int(1,  title="Pivot R", minval=1, maxval=20, group="[ PSP ] 💎", inline="psp2")
+
+// ══════════════════════════════════════════════════════════════════════════
+// SESSION & DAY
+// ══════════════════════════════════════════════════════════════════════════
+
+tz        = "Asia/Jerusalem"
+dow       = dayofweek(time, tz)
+isWeekday = dow != dayofweek.saturday
+inS1      = use_s1 and isWeekday and not na(time("1", sess1, tz))
+inS2      = use_s2 and isWeekday and not na(time("1", sess2, tz))
+inSession = inS1 or inS2
+
+h           = hour(time, tz)
+mn          = minute(time, tz)
+hm          = h * 100 + mn
+close_h_val = int(str.tonumber(str.substring(close_time, 0, 2)))
+close_m_val = int(str.tonumber(str.substring(close_time, 3, 5)))
+close_hm    = close_h_val * 100 + close_m_val
+
+// ══════════════════════════════════════════════════════════════════════════
+// DAILY RISK
+// ══════════════════════════════════════════════════════════════════════════
+
+isNewDay = ta.change(time("D")) != 0
+
+var float dayEq        = strategy.equity
+var int   dayCnt       = 0
+var int   lastEntryBar = -999
+var int   lastEntryDir = 0
+
+if isNewDay
+    dayEq        := strategy.equity
+    dayCnt        := 0
+    lastEntryBar  := -999
+    lastEntryDir  := 0
+
+dailyPnL      = strategy.equity - dayEq
+dailyLossOk   = dailyPnL > -math.abs(max_loss)
+dailyProfitOk = dailyPnL <  math.abs(max_profit)
+tradesOk      = dayCnt   < max_trades
+
+dayOk = (dow == dayofweek.sunday and use_sun) or (dow == dayofweek.monday and use_mon) or (dow == dayofweek.tuesday and use_tue) or (dow == dayofweek.wednesday and use_wed) or (dow == dayofweek.thursday and use_thu) or (dow == dayofweek.friday and use_fri) or (dow == dayofweek.saturday and use_sat)
+
+baseOk         = inSession and dailyLossOk and dailyProfitOk and tradesOk and dayOk and strategy.position_size == 0
+barsSinceEntry = bar_index - lastEntryBar
+
+// ══════════════════════════════════════════════════════════════════════════
+// ⚠️ ולידציה
+// ══════════════════════════════════════════════════════════════════════════
+
+tickValue       = syminfo.mintick * syminfo.pointvalue
+maxLossPerTrade = stop_ticks * tickValue * contracts
+
+// ✅ ולידציה הוסרה — חופשי לשים כל SL/TP
+
+// ══════════════════════════════════════════════════════════════════════════
+// INDICATORS
+// ══════════════════════════════════════════════════════════════════════════
+
+rsiVal   = ta.rsi(rsi_src, rsi_len)
+rsiLong  = rsiVal <= rsi_os
+rsiShort = rsiVal >= rsi_ob
+
+[bbMid, bbUp, bbDn] = ta.bb(bb_src, bb_len, bb_std)
+// ✅ תיקון: inSession[1] מונע כניסה בבר פתיחת הסשן (04:00 false signal)
+bbLong  = ta.crossunder(close, bbMid)  and inSession and inSession[1]
+bbShort = ta.crossover(close,  bbMid)  and inSession and inSession[1]
+
+vwapVal   = ta.vwap(vw_src)
+vwapLong  = ta.crossunder(close, vwapVal) and inSession and inSession[1]
+vwapShort = ta.crossover(close,  vwapVal) and inSession and inSession[1]
+
+[_macdLine, _sigLine, macdHist] = ta.macd(ma_src, ma_fast, ma_slow, ma_sig)
+macdLong  = ta.crossover(macdHist,  0)  and inSession and inSession[1]
+macdShort = ta.crossunder(macdHist, 0)  and inSession and inSession[1]
+
+stochK     = ta.sma(ta.stoch(close, high, low, stoch_k), stoch_ks)
+stochLong  = ta.crossover(stochK,  50)  and inSession and inSession[1]
+stochShort = ta.crossunder(stochK, 50)  and inSession and inSession[1]
+
+rsiDiv  = ta.rsi(div_src, div_len)
+bullDiv = low  < ta.lowest(low,   div_lb)[1] and rsiDiv > ta.lowest(rsiDiv,  div_lb)[1]
+bearDiv = high > ta.highest(high, div_lb)[1] and rsiDiv < ta.highest(rsiDiv, div_lb)[1]
+
+trueRange = math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
+trMA      = ta.sma(trueRange, vol_ma_len)
+volSpike  = (trueRange > trMA) and (trueRange[1] <= trMA[1])
+
+[c_6e, h_6e, l_6e]    = request.security(im_6e,    timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
+[c_6b, h_6b, l_6b]    = request.security(im_6b,    timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
+[c_dxy, h_dxy, l_dxy] = request.security(im_dxy,   timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
+[c_zb, h_zb, l_zb]    = request.security(im_zb,    timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
+[s1c, s1h, s1l]        = request.security(smt_sym1, timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
+[s2c, s2h, s2l]        = request.security(smt_sym2, timeframe.period, [close, high, low], lookahead=barmerge.lookahead_off)
+[p1c, p1o]             = request.security(psp_sym1, timeframe.period, [close, open],      lookahead=barmerge.lookahead_off)
+[p2c, p2o]             = request.security(psp_sym2, timeframe.period, [close, open],      lookahead=barmerge.lookahead_off)
+[p3c, p3o]             = request.security(psp_sym3, timeframe.period, [close, open],      lookahead=barmerge.lookahead_off)
+
+smtPivLow  = ta.pivotlow(low,   smt_pivot_l, smt_pivot_r)
+smtPivHigh = ta.pivothigh(high, smt_pivot_l, smt_pivot_r)
+
+var float lastMainL = na
+var float lastMainH = na
+var float lastS1L   = na
+var float lastS1H   = na
+var float lastS2L   = na
+var float lastS2H   = na
+
+if not na(smtPivLow)
+    lastMainL := low[smt_pivot_r]
+    lastS1L   := s1l[smt_pivot_r]
+    lastS2L   := s2l[smt_pivot_r]
+if not na(smtPivHigh)
+    lastMainH := high[smt_pivot_r]
+    lastS1H   := s1h[smt_pivot_r]
+    lastS2H   := s2h[smt_pivot_r]
+
+smtBullRaw = not na(lastMainL) and close <= lastMainL * 1.002 and (not na(lastS1L) and s1c > lastS1L or not na(lastS2L) and s2c > lastS2L)
+smtBearRaw = not na(lastMainH) and close >= lastMainH * 0.998 and (not na(lastS1H) and s1c < lastS1H or not na(lastS2H) and s2c < lastS2H)
+smtBull    = smtBullRaw and not smtBullRaw[1] and inSession and inSession[1]
+smtBear    = smtBearRaw and not smtBearRaw[1] and inSession and inSession[1]
+
+im_corr_zb = ta.correlation(close, c_zb, im_corr_l)
+zb_valid   = math.abs(im_corr_zb) >= im_zb_corr
+imPivLow   = ta.pivotlow(low,   im_pivot_l, im_pivot_r)
+imPivHigh  = ta.pivothigh(high, im_pivot_l, im_pivot_r)
+
+var float last6eL  = na
+var float last6eH  = na
+var float last6bL  = na
+var float last6bH  = na
+var float lastDxyL = na
+var float lastDxyH = na
+var float lastZbL  = na
+var float lastZbH  = na
+
+if not na(imPivLow)
+    last6eL  := l_6e[im_pivot_r]
+    last6bL  := l_6b[im_pivot_r]
+    lastDxyH := h_dxy[im_pivot_r]
+    lastZbL  := l_zb[im_pivot_r]
+if not na(imPivHigh)
+    last6eH  := h_6e[im_pivot_r]
+    last6bH  := h_6b[im_pivot_r]
+    lastDxyL := l_dxy[im_pivot_r]
+    lastZbH  := h_zb[im_pivot_r]
+
+imLongRaw  = (not na(last6eH) and (c_6e > last6eH or c_6b > last6bH) and not na(lastDxyL) and c_dxy < lastDxyL) or (zb_valid and not na(lastZbH) and c_zb > lastZbH)
+imShortRaw = (not na(last6eL) and (c_6e < last6eL or c_6b < last6bL) and not na(lastDxyH) and c_dxy > lastDxyH) or (zb_valid and not na(lastZbL) and c_zb < lastZbL)
+imLong     = imLongRaw  and not imLongRaw[1]  and inSession and inSession[1]
+imShort    = imShortRaw and not imShortRaw[1] and inSession and inSession[1]
+
+psp_corr_val = ta.correlation(p3c, p1c, psp_corr_l)
+ym_corr_ok   = psp_corr_val >= psp_corr
+pspPivLow    = ta.pivotlow(low,   psp_pivot_l, psp_pivot_r)
+pspPivHigh   = ta.pivothigh(high, psp_pivot_l, psp_pivot_r)
+
+var float lastP1L = na
+var float lastP1H = na
+var float lastP2L = na
+var float lastP2H = na
+var float lastP3L = na
+var float lastP3H = na
+
+if not na(pspPivLow)
+    lastP1L := p1c[psp_pivot_r]
+    lastP2L := p2c[psp_pivot_r]
+    lastP3L := p3c[psp_pivot_r]
+if not na(pspPivHigh)
+    lastP1H := p1c[psp_pivot_r]
+    lastP2H := p2c[psp_pivot_r]
+    lastP3H := p3c[psp_pivot_r]
+
+pspBullRaw = ym_corr_ok and not na(lastP1L) and p1c < lastP1L and (not na(lastP2L) and p2c > lastP2L or not na(lastP3L) and p3c > lastP3L)
+pspBearRaw = ym_corr_ok and not na(lastP1H) and p1c > lastP1H and (not na(lastP2H) and p2c < lastP2H or not na(lastP3H) and p3c < lastP3H)
+pspBull    = pspBullRaw and not pspBullRaw[1] and inSession and inSession[1]
+pspBear    = pspBearRaw and not pspBearRaw[1] and inSession and inSession[1]
+
+candleBody  = math.abs(close - open)
+candleRange = high - low
+bodyRatio   = candleRange > 0 ? candleBody / candleRange : 0
+upperWick   = high - math.max(close, open)
+lowerWick   = math.min(close, open) - low
+dnaLong     = not use_dna or (bodyRatio >= dna_body and close > open and lowerWick < candleBody)
+dnaShort    = not use_dna or (bodyRatio >= dna_body and close < open and upperWick < candleBody)
+
+[diPlus, diMinus, adxVal] = ta.dmi(14, 14)
+regimeOk = not use_regime or adxVal >= regime_adx
+
+// ══════════════════════════════════════════════════════════════════════════
+// STRATEGY LOGIC
+// ══════════════════════════════════════════════════════════════════════════
+
+orLong  = (use_stoch and stochLong)  or (use_bb    and bbLong)   or
+          (use_macd  and macdLong)   or (use_vwap  and vwapLong) or
+          (use_rsi   and rsiLong)    or (use_rsidiv and bullDiv)  or
+          (use_vol   and volSpike)   or (use_smt   and smtBull)  or
+          (use_im    and imLong)     or (use_psp   and pspBull)
+
+orShort = (use_stoch and stochShort) or (use_bb    and bbShort)   or
+          (use_macd  and macdShort)  or (use_vwap  and vwapShort) or
+          (use_rsi   and rsiShort)   or (use_rsidiv and bearDiv)  or
+          (use_vol   and volSpike)   or (use_smt   and smtBear)  or
+          (use_im    and imShort)    or (use_psp   and pspBear)
+
+longSig  = ind_rev ? orShort : orLong
+shortSig = ind_rev ? orLong  : orShort
+
+// ✅ הגנה מפני בר פתיחת סשן — אין כניסה בבר הראשון של הסשן
+isFirstSessionBar = inSession and not inSession[1]
+
+canLong  = baseOk and dnaLong  and regimeOk and not isFirstSessionBar and (lastEntryDir == 0 or lastEntryDir == 1  or (lastEntryDir == -1 and barsSinceEntry >= cd_opp))
+canShort = baseOk and dnaShort and regimeOk and not isFirstSessionBar and (lastEntryDir == 0 or lastEntryDir == -1 or (lastEntryDir == 1  and barsSinceEntry >= cd_opp))
+
+tick     = syminfo.mintick
+sl_long  = close - stop_ticks * tick
+tp_long  = close + stop_ticks * tick * rr_ratio
+sl_short = close + stop_ticks * tick
+tp_short = close - stop_ticks * tick * rr_ratio
+
+long_msg  = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"buy","quantity":"'  + str.tostring(tp_qty) + '","orderType":"market"}'
+short_msg = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"sell","quantity":"' + str.tostring(tp_qty) + '","orderType":"market"}'
+close_msg = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"exit","quantity":"' + str.tostring(tp_qty) + '","orderType":"market"}'
+
+lblSize = label_size == "tiny" ? size.tiny : label_size == "small" ? size.small : label_size == "large" ? size.large : size.normal
+ind_txt = (use_stoch ? "STOCH " : "") + (use_bb ? "BB " : "") + (use_macd ? "MACD " : "") + (use_vwap ? "VWAP " : "") + (use_rsi ? "RSI " : "") + (use_smt ? "SMT " : "") + (use_im ? "IM " : "") + (use_psp ? "PSP" : "")
+
+// ══════════════════════════════════════════════════════════════════════════
+// TRAILING STOP
+// ══════════════════════════════════════════════════════════════════════════
+
+atrTrail             = ta.atr(trail_atr)
+var float trailLevel = na
+var float trailEntry = na
+var int   trailDir   = 0
+
+if strategy.position_size > 0
+    trailLevel := na(trailLevel) ? close - atrTrail * trail_mult : math.max(trailLevel, close - atrTrail * trail_mult)
+else if strategy.position_size < 0
+    trailLevel := na(trailLevel) ? close + atrTrail * trail_mult : math.min(trailLevel, close + atrTrail * trail_mult)
+else
+    trailLevel := na
+
+if strategy.position_size != 0 and strategy.position_size[1] == 0
+    trailEntry := close
+    trailDir   := strategy.position_size > 0 ? 1 : -1
+
+trailHitLong   = use_trail and strategy.position_size > 0 and not na(trailLevel) and close < trailLevel
+trailHitShort  = use_trail and strategy.position_size < 0 and not na(trailLevel) and close > trailLevel
+trailPnL       = trailDir == 1 ? (close - trailEntry) : (trailEntry - close)
+trailPnLDollar = trailPnL * syminfo.pointvalue * contracts
+
+if trailHitLong or trailHitShort
+    trailResult = trailPnLDollar >= 0 ? "✅ +" + str.tostring(math.round(trailPnLDollar, 0)) + "$" : "❌ " + str.tostring(math.round(trailPnLDollar, 0)) + "$"
+    strategy.close_all(comment="🔁 Trail", alert_message=close_msg)
+    if show_labels
+        label.new(bar_index, trailDir == 1 ? low : high, text="🔁 Trail\\n" + trailResult, color=trailPnLDollar >= 0 ? color.new(#00C853, 0) : color.new(#EF5350, 0), textcolor=color.white, style=trailDir == 1 ? label.style_label_up : label.style_label_down, size=size.small)
+    trailLevel := na
+
+// ══════════════════════════════════════════════════════════════════════════
+// ENTRIES
+// ══════════════════════════════════════════════════════════════════════════
+
+if longSig and canLong
+    strategy.entry("Long", strategy.long, qty=contracts, comment="🟢 L", alert_message=long_msg)
+    if use_trail
+        strategy.exit("TP Long", "Long", limit=tp_long, alert_message=close_msg)
+    else
+        strategy.exit("SL/TP Long", "Long", stop=sl_long, limit=tp_long, alert_message=close_msg)
+    dayCnt       := dayCnt + 1
+    lastEntryBar := bar_index
+    lastEntryDir := 1
+    if show_labels
+        label.new(bar_index, low, text="▲ Long @" + str.tostring(math.round(close, 2)) + "\\n" + ind_txt, color=color.new(#1565C0, 0), textcolor=color.white, style=label.style_label_up, size=lblSize)
+    if show_sl_tp
+        line.new(bar_index, tp_long, bar_index + line_len, tp_long, color=color.new(#00C853, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        label.new(bar_index + line_len, tp_long, "TP", color=color.new(#00C853, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+        if not use_trail
+            line.new(bar_index, sl_long, bar_index + line_len, sl_long, color=color.new(#EF5350, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + line_len, sl_long, "SL", color=color.new(#EF5350, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+
+if shortSig and canShort and not (longSig and canLong)
+    strategy.entry("Short", strategy.short, qty=contracts, comment="🔴 S", alert_message=short_msg)
+    if use_trail
+        strategy.exit("TP Short", "Short", limit=tp_short, alert_message=close_msg)
+    else
+        strategy.exit("SL/TP Short", "Short", stop=sl_short, limit=tp_short, alert_message=close_msg)
+    dayCnt       := dayCnt + 1
+    lastEntryBar := bar_index
+    lastEntryDir := -1
+    if show_labels
+        label.new(bar_index, high, text="▼ Short @" + str.tostring(math.round(close, 2)) + "\\n" + ind_txt, color=color.new(#B71C1C, 0), textcolor=color.white, style=label.style_label_down, size=lblSize)
+    if show_sl_tp
+        line.new(bar_index, tp_short, bar_index + line_len, tp_short, color=color.new(#00C853, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        label.new(bar_index + line_len, tp_short, "TP", color=color.new(#00C853, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+        if not use_trail
+            line.new(bar_index, sl_short, bar_index + line_len, sl_short, color=color.new(#EF5350, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + line_len, sl_short, "SL", color=color.new(#EF5350, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+
+// ══════════════════════════════════════════════════════════════════════════
+// FORCED CLOSES
+// ══════════════════════════════════════════════════════════════════════════
+
+if use_close and hm >= close_hm and strategy.position_size != 0
+    strategy.close_all(comment="⏰ סגירה", alert_message=close_msg)
+if not inSession and strategy.position_size != 0
+    strategy.close_all(comment="🏁 סשן", alert_message=close_msg)
+if not dailyLossOk and strategy.position_size != 0
+    strategy.close_all(comment="❌ הפסד", alert_message=close_msg)
+if not dailyProfitOk and strategy.position_size != 0
+    strategy.close_all(comment="✅ רווח", alert_message=close_msg)
+
+// ══════════════════════════════════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════════════════════════════════
+
+bgcolor(show_bg and inS1 ? color.new(#2196F3, 93) : na)
+bgcolor(show_bg and inS2 ? color.new(#4CAF50, 93) : na)
+plot(bbUp,     "BB Upper", color.new(#2196F3, 30), linewidth=1)
+plot(bbMid,    "BB Mid",   color.new(#FF9800,  0), linewidth=2)
+plot(bbDn,     "BB Lower", color.new(#2196F3, 30), linewidth=1)
+plot(vwapVal,  "VWAP",     color.new(#4CAF50,  0), linewidth=2)
+plot(macdHist, "MACD Hist", color=macdHist >= 0 ? color.new(#00E676, 0) : color.new(#EF5350, 0), style=plot.style_columns)
+plot(volume,   "Volume",   display=display.none)
+plotshape(longSig  and canLong,                               title="LONG",  location=location.belowbar, color=color.new(#00C853, 0), style=shape.triangleup,   size=size.small, text="L")
+plotshape(shortSig and canShort and not(longSig and canLong), title="SHORT", location=location.abovebar, color=color.new(#EF5350, 0), style=shape.triangledown, size=size.small, text="S")
+plot(use_trail and strategy.position_size != 0 ? trailLevel : na, "🔁 Trailing Stop", color=color.new(#FF6F00, 0), linewidth=2, style=plot.style_line)
+
+// ══════════════════════════════════════════════════════════════════════════
+// BIT ENCODING — Data Window Export
+// ══════════════════════════════════════════════════════════════════════════
+
+rsi_cl(v)  => ta.crossover(v,  30)
+rsi_cs(v)  => ta.crossunder(v, 70)
+bb_cl(mid) => ta.crossunder(close, mid)
+bb_cs(mid) => ta.crossover(close,  mid)
+mc_cl(h2)  => ta.crossover(h2,  0)
+mc_cs(h2)  => ta.crossunder(h2, 0)
+sk_cl(k)   => ta.crossover(k,  30)
+sk_cs(k)   => ta.crossunder(k, 70)
+
+macd_hist(src, fast, slow, sig) =>
+    m = ta.ema(src, fast) - ta.ema(src, slow)
+    m - ta.ema(m, sig)
+
+rsi7c   = ta.rsi(close, 7)
+rsi14c  = ta.rsi(close, 14)
+rsi21c  = ta.rsi(close, 21)
+rsi7h2  = ta.rsi(hl2,   7)
+rsi14h2 = ta.rsi(hl2,   14)
+rsi21h2 = ta.rsi(hl2,   21)
+rsi_long_a  = (rsi_cl(rsi7c)?1:0)+(rsi_cl(rsi14c)?2:0)+(rsi_cl(rsi21c)?4:0)+(rsi_cl(rsi7h2)?8:0)+(rsi_cl(rsi14h2)?16:0)+(rsi_cl(rsi21h2)?32:0)
+rsi_short_a = (rsi_cs(rsi7c)?1:0)+(rsi_cs(rsi14c)?2:0)+(rsi_cs(rsi21c)?4:0)+(rsi_cs(rsi7h2)?8:0)+(rsi_cs(rsi14h2)?16:0)+(rsi_cs(rsi21h2)?32:0)
+
+rsi7h3  = ta.rsi(hlc3,  7)
+rsi14h3 = ta.rsi(hlc3,  14)
+rsi21h3 = ta.rsi(hlc3,  21)
+rsi7c4  = ta.rsi(ohlc4, 7)
+rsi14c4 = ta.rsi(ohlc4, 14)
+rsi21c4 = ta.rsi(ohlc4, 21)
+rsi_long_b  = (rsi_cl(rsi7h3)?1:0)+(rsi_cl(rsi14h3)?2:0)+(rsi_cl(rsi21h3)?4:0)+(rsi_cl(rsi7c4)?8:0)+(rsi_cl(rsi14c4)?16:0)+(rsi_cl(rsi21c4)?32:0)
+rsi_short_b = (rsi_cs(rsi7h3)?1:0)+(rsi_cs(rsi14h3)?2:0)+(rsi_cs(rsi21h3)?4:0)+(rsi_cs(rsi7c4)?8:0)+(rsi_cs(rsi14c4)?16:0)+(rsi_cs(rsi21c4)?32:0)
+
+[bm14c,bu14c,bd14c] = ta.bb(close, 14, 2.0)
+[bm18c,bu18c,bd18c] = ta.bb(close, 18, 2.0)
+[bm20c,bu20c,bd20c] = ta.bb(close, 20, 2.0)
+[bm25c,bu25c,bd25c] = ta.bb(close, 25, 2.0)
+[bm14h,bu14h,bd14h] = ta.bb(hl2,   14, 2.0)
+[bm18h,bu18h,bd18h] = ta.bb(hl2,   18, 2.0)
+[bm20h,bu20h,bd20h] = ta.bb(hl2,   20, 2.0)
+[bm25h,bu25h,bd25h] = ta.bb(hl2,   25, 2.0)
+bb_long_a  = (bb_cl(bm14c)?1:0)+(bb_cl(bm18c)?2:0)+(bb_cl(bm20c)?4:0)+(bb_cl(bm25c)?8:0)+(bb_cl(bm14h)?16:0)+(bb_cl(bm18h)?32:0)+(bb_cl(bm20h)?64:0)+(bb_cl(bm25h)?128:0)
+bb_short_a = (bb_cs(bm14c)?1:0)+(bb_cs(bm18c)?2:0)+(bb_cs(bm20c)?4:0)+(bb_cs(bm25c)?8:0)+(bb_cs(bm14h)?16:0)+(bb_cs(bm18h)?32:0)+(bb_cs(bm20h)?64:0)+(bb_cs(bm25h)?128:0)
+
+[bm14h3,bu14h3,bd14h3] = ta.bb(hlc3,  14, 2.0)
+[bm18h3,bu18h3,bd18h3] = ta.bb(hlc3,  18, 2.0)
+[bm20h3,bu20h3,bd20h3] = ta.bb(hlc3,  20, 2.0)
+[bm25h3,bu25h3,bd25h3] = ta.bb(hlc3,  25, 2.0)
+[bm14c4,bu14c4,bd14c4] = ta.bb(ohlc4, 14, 2.0)
+[bm18c4,bu18c4,bd18c4] = ta.bb(ohlc4, 18, 2.0)
+[bm20c4,bu20c4,bd20c4] = ta.bb(ohlc4, 20, 2.0)
+[bm25c4,bu25c4,bd25c4] = ta.bb(ohlc4, 25, 2.0)
+bb_long_b  = (bb_cl(bm14h3)?1:0)+(bb_cl(bm18h3)?2:0)+(bb_cl(bm20h3)?4:0)+(bb_cl(bm25h3)?8:0)+(bb_cl(bm14c4)?16:0)+(bb_cl(bm18c4)?32:0)+(bb_cl(bm20c4)?64:0)+(bb_cl(bm25c4)?128:0)
+bb_short_b = (bb_cs(bm14h3)?1:0)+(bb_cs(bm18h3)?2:0)+(bb_cs(bm20h3)?4:0)+(bb_cs(bm25h3)?8:0)+(bb_cs(bm14c4)?16:0)+(bb_cs(bm18c4)?32:0)+(bb_cs(bm20c4)?64:0)+(bb_cs(bm25c4)?128:0)
+
+mh1  = macd_hist(close, 8,  21, 9)
+mh2  = macd_hist(close, 8,  26, 9)
+mh3  = macd_hist(close, 12, 21, 7)
+mh4  = macd_hist(close, 12, 26, 9)
+mh5  = macd_hist(hl2,   8,  21, 9)
+mh6  = macd_hist(hl2,   8,  26, 9)
+mh7  = macd_hist(hl2,   12, 21, 7)
+mh8  = macd_hist(hl2,   12, 26, 9)
+macd_long_a  = (mc_cl(mh1)?1:0)+(mc_cl(mh2)?2:0)+(mc_cl(mh3)?4:0)+(mc_cl(mh4)?8:0)+(mc_cl(mh5)?16:0)+(mc_cl(mh6)?32:0)+(mc_cl(mh7)?64:0)+(mc_cl(mh8)?128:0)
+macd_short_a = (mc_cs(mh1)?1:0)+(mc_cs(mh2)?2:0)+(mc_cs(mh3)?4:0)+(mc_cs(mh4)?8:0)+(mc_cs(mh5)?16:0)+(mc_cs(mh6)?32:0)+(mc_cs(mh7)?64:0)+(mc_cs(mh8)?128:0)
+
+mh9  = macd_hist(hlc3,  8,  21, 9)
+mh10 = macd_hist(hlc3,  8,  26, 9)
+mh11 = macd_hist(hlc3,  12, 21, 7)
+mh12 = macd_hist(hlc3,  12, 26, 9)
+mh13 = macd_hist(ohlc4, 8,  21, 9)
+mh14 = macd_hist(ohlc4, 8,  26, 9)
+mh15 = macd_hist(ohlc4, 12, 21, 7)
+mh16 = macd_hist(ohlc4, 12, 26, 9)
+macd_long_b  = (mc_cl(mh9)?1:0)+(mc_cl(mh10)?2:0)+(mc_cl(mh11)?4:0)+(mc_cl(mh12)?8:0)+(mc_cl(mh13)?16:0)+(mc_cl(mh14)?32:0)+(mc_cl(mh15)?64:0)+(mc_cl(mh16)?128:0)
+macd_short_b = (mc_cs(mh9)?1:0)+(mc_cs(mh10)?2:0)+(mc_cs(mh11)?4:0)+(mc_cs(mh12)?8:0)+(mc_cs(mh13)?16:0)+(mc_cs(mh14)?32:0)+(mc_cs(mh15)?64:0)+(mc_cs(mh16)?128:0)
+
+sk5s1  = ta.sma(ta.stoch(close,high,low,5),  1)
+sk6s1  = ta.sma(ta.stoch(close,high,low,6),  1)
+sk9s1  = ta.sma(ta.stoch(close,high,low,9),  1)
+sk14s1 = ta.sma(ta.stoch(close,high,low,14), 1)
+sk5s3  = ta.sma(ta.stoch(close,high,low,5),  3)
+sk6s3  = ta.sma(ta.stoch(close,high,low,6),  3)
+sk9s3  = ta.sma(ta.stoch(close,high,low,9),  3)
+sk14s3 = ta.sma(ta.stoch(close,high,low,14), 3)
+stoch_long_bits  = (sk_cl(sk5s1)?1:0)+(sk_cl(sk6s1)?2:0)+(sk_cl(sk9s1)?4:0)+(sk_cl(sk14s1)?8:0)+(sk_cl(sk5s3)?16:0)+(sk_cl(sk6s3)?32:0)+(sk_cl(sk9s3)?64:0)+(sk_cl(sk14s3)?128:0)
+stoch_short_bits = (sk_cs(sk5s1)?1:0)+(sk_cs(sk6s1)?2:0)+(sk_cs(sk9s1)?4:0)+(sk_cs(sk14s1)?8:0)+(sk_cs(sk5s3)?16:0)+(sk_cs(sk6s3)?32:0)+(sk_cs(sk9s3)?64:0)+(sk_cs(sk14s3)?128:0)
+
+// ══════════════════════════════════════════════════════════════════════════
+// EXPORT — Data Window
+// ══════════════════════════════════════════════════════════════════════════
+
+plot(dayofweek(time, tz),                  "DOW",               display=display.data_window)
+plot(rsi_long_a,                           "RSI Long Bits A",   display=display.data_window)
+plot(rsi_short_a,                          "RSI Short Bits A",  display=display.data_window)
+plot(rsi_long_b,                           "RSI Long Bits B",   display=display.data_window)
+plot(rsi_short_b,                          "RSI Short Bits B",  display=display.data_window)
+plot(bb_long_a,                            "BB Long Bits A",    display=display.data_window)
+plot(bb_short_a,                           "BB Short Bits A",   display=display.data_window)
+plot(bb_long_b,                            "BB Long Bits B",    display=display.data_window)
+plot(bb_short_b,                           "BB Short Bits B",   display=display.data_window)
+plot(macd_long_a,                          "MACD Long Bits A",  display=display.data_window)
+plot(macd_short_a,                         "MACD Short Bits A", display=display.data_window)
+plot(macd_long_b,                          "MACD Long Bits B",  display=display.data_window)
+plot(macd_short_b,                         "MACD Short Bits B", display=display.data_window)
+plot(stoch_long_bits,                      "STOCH Long Bits",   display=display.data_window)
+plot(stoch_short_bits,                     "STOCH Short Bits",  display=display.data_window)
+plot(ta.crossunder(close,vwapVal) ? 1 : 0, "VWAP Long",         display=display.data_window)
+plot(ta.crossover(close, vwapVal) ? 1 : 0, "VWAP Short",        display=display.data_window)
+plot(volSpike ? 1 : 0,                     "VOL Spike",         display=display.data_window)
+plot(bullDiv  ? 1 : 0,                     "RSI DIV Bull",      display=display.data_window)
+plot(bearDiv  ? 1 : 0,                     "RSI DIV Bear",      display=display.data_window)
+plot(smtBull  ? 1 : 0,                     "SMT Bull",          display=display.data_window)
+plot(smtBear  ? 1 : 0,                     "SMT Bear",          display=display.data_window)
+plot(imLong   ? 1 : 0,                     "IM Long",           display=display.data_window)
+plot(imShort  ? 1 : 0,                     "IM Short",          display=display.data_window)
+plot(pspBull  ? 1 : 0,                     "PSP Bull",          display=display.data_window)
+plot(pspBear  ? 1 : 0,                     "PSP Bear",          display=display.data_window)
+`;
+document.getElementById('code').textContent = code;
+function copyCode(){
+  try{navigator.clipboard.writeText(code).then(()=>flash('btn-copy','✅ הועתק!')).catch(()=>{selCode();flash('btn-sel','✅ Ctrl+C')});}
+  catch(e){selCode();flash('btn-sel','✅ Ctrl+C');}
+}
+function selCode(){
+  const el=document.getElementById('code');
+  const r=document.createRange(); r.selectNodeContents(el);
+  const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  flash('btn-sel','✅ בחור! Ctrl+C');
+}
+function flash(id,txt){
+  const b=document.getElementById(id),o=b.textContent;
+  b.textContent=txt; b.classList.add('ok');
+  setTimeout(()=>{b.textContent=o;b.classList.remove('ok');},3000);
+}
+</script>
+</body>
+</html>

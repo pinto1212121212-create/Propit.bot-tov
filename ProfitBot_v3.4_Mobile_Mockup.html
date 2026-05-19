@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProfitBot v3.4 — TradingView Mobile Mockup</title>
+<style>
+  :root {
+    --bg:        #131722;
+    --panel:    #1e222d;
+    --panel-2: #2a2e39;
+    --border:  #363a45;
+    --text:    #d1d4dc;
+    --text-dim:#787b86;
+    --green:   #26a69a;
+    --red:     #ef5350;
+    --blue:    #2962ff;
+    --accent:  #ff9800;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  /* Phone status bar mockup */
+  .status-bar {
+    background: #000;
+    color: #fff;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  }
+  .browser-bar {
+    background: #1a1a1a;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #333;
+  }
+  .browser-bar .url {
+    background: #2a2a2a;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    color: #aaa;
+    flex: 1;
+    text-align: center;
+  }
+  /* Dialog header */
+  .dialog-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .dialog-header .close { font-size: 22px; cursor: pointer; color: var(--text-dim); }
+  .dialog-header .title { font-size: 18px; font-weight: 500; }
+  /* Tabs */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .tab {
+    flex: 1;
+    padding: 12px 0;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    position: relative;
+  }
+  .tab.active { color: var(--text); }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: var(--blue);
+  }
+  /* Section header */
+  .section {
+    padding: 18px 16px 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+  /* Input row */
+  .row {
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    min-height: 40px;
+  }
+  .row .label {
+    flex: 1;
+    text-align: right;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .row .input,
+  .row .select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-size: 14px;
+    min-width: 80px;
+    text-align: center;
+  }
+  .row .input.wide { min-width: 150px; }
+  .row .input.full { flex: 1; }
+  /* Checkbox */
+  .checkbox {
+    width: 18px;
+    height: 18px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  .checkbox.checked {
+    background: var(--green);
+    border-color: var(--green);
+  }
+  .checkbox.checked::after { content: '✓'; }
+  /* Time selector */
+  .time-picker {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 100px;
+    justify-content: space-between;
+  }
+  .time-picker .icon { color: var(--text-dim); }
+  /* Recommended badge */
+  .badge {
+    background: var(--green);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    margin-right: 6px;
+  }
+  .badge.warn { background: var(--accent); }
+  .badge.off  { background: var(--text-dim); }
+  /* Info icon */
+  .info {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--text-dim);
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  /* Status panel mockup */
+  .preview-panel {
+    margin: 20px 16px;
+    padding: 16px;
+    background: linear-gradient(135deg, #0a0e1a 0%, #131722 100%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .preview-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text);
+    display: flex;
+    justify-content: space-between;
+  }
+  .preview-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 13px;
+  }
+  .preview-row .v { color: var(--green); font-weight: 500; }
+  .preview-row .v.bad { color: var(--red); }
+  .preview-row .v.warn { color: var(--accent); }
+  /* Sticky bottom CTA */
+  .cta-wrap {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding: 12px 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+  .cta {
+    flex: 1;
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .cta.primary { background: var(--blue); color: white; }
+  .cta.secondary { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+  /* Section divider */
+  .sep { height: 1px; background: var(--border); margin: 8px 0; }
+  /* Recommended config callout */
+  .callout {
+    margin: 12px 16px;
+    padding: 12px 14px;
+    background: rgba(38, 166, 154, 0.1);
+    border: 1px solid rgba(38, 166, 154, 0.3);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .callout .title { color: var(--green); font-weight: 600; margin-bottom: 6px; }
+  /* Footer */
+  .footer {
+    padding: 16px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+  .footer a { color: var(--blue); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<!-- Phone status bar -->
+<div class="status-bar">
+  <span>🔋 4G+</span>
+  <span>16:19</span>
+</div>
+
+<!-- Browser bar -->
+<div class="browser-bar">
+  <span>⋮</span>
+  <span>📑 3</span>
+  <span>+</span>
+  <div class="url">🔒 il.tradingview.com</div>
+  <span>⌂</span>
+</div>
+
+<!-- Callout: this is what you'd see -->
+<div class="callout">
+  <div class="title">📱 ככה זה ייראה בטלפון שלך</div>
+  זה מוקאפ של חלון ההגדרות של <b>v3.4 PropKiller</b> ב-TradingView, עם ה<b>קונפיגורציה המומלצת</b> שכבר ממולאת. גלול למטה כדי לראות הכל.
+</div>
+
+<!-- Dialog -->
+<div class="dialog-header">
+  <span class="close">✕</span>
+  <span class="title">ProfitBot | Jerusalem v3.4 PropKiller</span>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab">נראות</div>
+  <div class="tab">עיצוב</div>
+  <div class="tab">מאפיינים</div>
+  <div class="tab active">תשומות</div>
+</div>
+
+<!-- === FUNDED MODE === -->
+<div class="section">🎯 מצב</div>
+<div class="row">
+  <span class="info">i</span>
+  <span class="label">💎 Funded Mode (אוטומטית שמרני)</span>
+  <span class="badge off">EVAL</span>
+  <span class="checkbox"></span>
+</div>
+
+<!-- === SESSIONS === -->
+<div class="section">🕐 סשנים</div>
+<div class="row">
+  <span class="label">שעות</span>
+  <div class="time-picker"><span class="icon">🕐</span><span>0800-1200</span></div>
+  <span class="label" style="flex:0">Account A</span>
+  <span class="badge">ON</span>
+  <span class="checkbox checked"></span>
+</div>
+<div class="row">
+  <span class="label">שעות</span>
+  <div class="time-picker"><span class="icon">🕐</span><span>1300-1700</span></div>
+  <span class="label" style="flex:0">Account B</span>
+  <span class="badge off">OFF</span>
+  <span class="checkbox"></span>
+</div>
+
+<!-- === CLOSE === -->
+<div class="section">⏰ סגירה</div>
+<div class="row">
+  <span class="label">סגירה בסוף יום</span>
+  <span class="checkbox checked"></span>
+</div>
+<div class="row">
+  <span class="label">🕐 שעה</span>
+  <div class="time-picker"><span>17:00</span><span class="icon">▼</span></div>
+</div>
+<div class="row">
+  <span class="label">חסום N ברים אחרונים</span>
+  <span class="input">3</span>
+</div>
+
+<!-- === RISK === -->
+<div class="section">💰 ניהול סיכון</div>
+<div class="row"><span class="label">חוזים בסיס</span><span class="input">1</span></div>
+<div class="row">
+  <span class="label">הפסד יומי $</span>
+  <span class="badge">REC</span>
+  <span class="input">700</span>
+</div>
+<div class="row">
+  <span class="label">רווח יומי $</span>
+  <span class="badge">REC</span>
+  <span class="input">1500</span>
+</div>
+<div class="row"><span class="label">עסקאות</span><span class="input">4</span></div>
+<div class="row">
+  <span class="label">סטופ טיקים</span>
+  <span class="badge">REC</span>
+  <span class="input">40</span>
+</div>
+<div class="row"><span class="label">RR</span><span class="input">2.0</span></div>
+<div class="row"><span class="label">CD כיוון הפוך</span><span class="input">4</span></div>
+<div class="row"><span class="label">הפסדים רצופים → סגור יום</span><span class="input">3</span></div>
+
+<!-- === PARTIAL TP === -->
+<div class="section">🎯 Breakeven & Partial</div>
+<div class="row">
+  <span class="info">i</span>
+  <span class="label">Partial TP @ 1R + BE</span>
+  <span class="badge">ON</span>
+  <span class="checkbox checked"></span>
+</div>
+<div class="row"><span class="label">% לסגור ב-1R</span><span class="input">50</span></div>
+
+<!-- === PEAK LOCKOUT === -->
+<div class="section">🛡️ Peak Lockout</div>
+<div class="row">
+  <span class="info">i</span>
+  <span class="label">Intraday Peak Lockout</span>
+  <span class="badge">ON ⭐</span>
+  <span class="checkbox checked"></span>
+</div>
+<div class="row"><span class="label">% נתון בחזרה → נעל</span><span class="input">40</span></div>
+<div class="row"><span class="label">פעיל החל מ-$</span><span class="input">200</span></div>
+
+<!-- === NEWS BLACKOUT === -->
+<div class="section">📰 News Blackout</div>
+<div class="row">
+  <span class="label">News Blackout</span>
+  <span class="badge">ON</span>
+  <span class="checkbox checked"></span>
+</div>
+<div class="row">
+  <span class="label">זמני חדשות</span>
+  <span class="input wide">15:30,15:00,21:00</span>
+</div>
+<div class="row"><span class="label">חיץ ± דקות</span><span class="input">15</span></div>
+
+<!-- === SCALING === -->
+<div class="section">📈 Scaling</div>
+<div class="row">
+  <span class="info">i</span>
+  <span class="label">Auto-Scaling Contracts</span>
+  <span class="badge off">OFF</span>
+  <span class="checkbox"></span>
+</div>
+<div class="row"><span class="label">$ להעלאת קומה</span><span class="input">300</span></div>
+<div class="row"><span class="label">חוזים מקסימום</span><span class="input">3</span></div>
+
+<!-- === DAYS === -->
+<div class="section">🗓️ ימים</div>
+<div class="row" style="justify-content: space-around;">
+  <span><span class="checkbox"></span> ש׳</span>
+  <span><span class="checkbox"></span> ו׳</span>
+  <span><span class="checkbox checked"></span> ה׳</span>
+  <span><span class="checkbox checked"></span> ד׳</span>
+  <span><span class="checkbox checked"></span> ג׳</span>
+  <span><span class="checkbox checked"></span> ב׳</span>
+  <span><span class="checkbox checked"></span> א׳</span>
+</div>
+
+<!-- === INDICATORS === -->
+<div class="section">📡 OR אינדיקטורים</div>
+<div class="row" style="justify-content: space-around;">
+  <span><span class="checkbox checked"></span> VWAP <span class="badge">REC</span></span>
+  <span><span class="checkbox"></span> MACD</span>
+  <span><span class="checkbox"></span> BB</span>
+  <span><span class="checkbox"></span> STOCH</span>
+</div>
+<div class="row" style="justify-content: space-around;">
+  <span><span class="checkbox checked"></span> VOL <span class="badge">REC</span></span>
+  <span><span class="checkbox"></span> RSI</span>
+</div>
+
+<!-- === STATUS PANEL PREVIEW === -->
+<div class="preview-panel">
+  <div class="preview-title">
+    <span>📊 ProfitBot v3.4 PK</span>
+    <span style="color: var(--blue);">🎯 EVAL</span>
+  </div>
+  <div class="preview-row"><span>PnL היום</span><span class="v">$+325</span></div>
+  <div class="preview-row"><span>Peak / Giveback</span><span class="v">$450 ↓28%</span></div>
+  <div class="preview-row"><span>עסקאות</span><span class="v">2 / 4</span></div>
+  <div class="preview-row"><span>חוזים עכשיו</span><span class="v">1</span></div>
+  <div class="preview-row"><span>רצף הפסדים</span><span class="v">0 / 3</span></div>
+  <div class="preview-row"><span>Risk/Trade</span><span class="v">$200</span></div>
+  <div class="preview-row"><span>סשן</span><span class="v">A 08-12</span></div>
+  <div class="preview-row"><span>סטטוס</span><span class="v">🟢 פעיל</span></div>
+  <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-dim); text-align: center;">
+    ↑ זה הפאנל שיופיע בפינה הימנית-עליונה של הגרף בזמן אמת
+  </div>
+</div>
+
+<!-- Callout: chart preview -->
+<div class="callout">
+  <div class="title">📈 על הגרף עצמו תראה:</div>
+  • רקע <span style="color: #2196F3;">כחול</span> בשעות 08-12 (Account A פעיל)<br>
+  • <span style="color: #FF9800;">VWAP כתום</span> + <span style="color: #4CAF50;">קווי BB ירוקים</span><br>
+  • משולש <span style="color: var(--green);">🟢 L</span> או <span style="color: var(--red);">🔴 S</span> בכל כניסה<br>
+  • קווים מקווקווים ירוק (TP) ואדום (SL)<br>
+  • קו <span style="color: #FFB300;">צהוב מנוקד = TP חלקי 1R</span><br>
+  • תווית <span style="color: #FFB300;">🔒 BE</span> כשה-SL זז לbreakeven<br>
+  • רקע <span style="color: var(--accent);">כתום</span> בזמן News Blackout (חסום)<br>
+  • רקע <span style="color: var(--text-dim);">אפור</span> ב-3 ברים האחרונים של הסשן (חסום)
+</div>
+
+<!-- Sticky CTA -->
+<div class="cta-wrap">
+  <div class="cta secondary">ביטול</div>
+  <div class="cta primary">אישור</div>
+</div>
+
+<div class="footer">
+  📂 הקוד המלא: <br>
+  <a href="https://github.com/pinto1212121212-create/Propit.bot-tov/blob/claude/review-code-verify-Pr4tz/ProfitBot_Jerusalem_v3.4_PropKiller.pine">ProfitBot v3.4 PropKiller</a><br><br>
+  💡 ההגדרות שמסומנות ב-<span class="badge">REC</span> הן הערכים שאני ממליץ עליהם.
+</div>
+
+</body>
+</html>

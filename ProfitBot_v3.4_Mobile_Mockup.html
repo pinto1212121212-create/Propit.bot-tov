@@ -20,49 +20,56 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
     font-size: 14px;
     line-height: 1.5;
   }
-  /* Phone status bar mockup */
+  /* Status bar */
   .status-bar {
     background: #000;
     color: #fff;
-    padding: 8px 16px;
+    padding: 6px 16px;
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
+    font-size: 11px;
   }
   .browser-bar {
     background: #1a1a1a;
-    padding: 10px 16px;
+    padding: 10px 12px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     border-bottom: 1px solid #333;
+    font-size: 13px;
   }
   .browser-bar .url {
     background: #2a2a2a;
     padding: 6px 14px;
     border-radius: 20px;
-    font-size: 13px;
     color: #aaa;
     flex: 1;
     text-align: center;
   }
   /* Dialog header */
   .dialog-header {
-    padding: 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
-  .dialog-header .close { font-size: 22px; cursor: pointer; color: var(--text-dim); }
-  .dialog-header .title { font-size: 18px; font-weight: 500; }
+  .dialog-header .close {
+    font-size: 22px;
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dialog-header .title { font-size: 17px; font-weight: 500; }
   /* Tabs */
   .tabs {
     display: flex;
@@ -74,8 +81,7 @@
     padding: 12px 0;
     text-align: center;
     color: var(--text-dim);
-    font-size: 14px;
-    cursor: pointer;
+    font-size: 13px;
     position: relative;
   }
   .tab.active { color: var(--text); }
@@ -83,47 +89,89 @@
     content: '';
     position: absolute;
     bottom: -1px;
-    left: 20%;
-    right: 20%;
+    left: 25%;
+    right: 25%;
     height: 2px;
     background: var(--blue);
   }
-  /* Section header */
-  .section {
-    padding: 18px 16px 8px;
+  /* Group header */
+  .group-header {
+    padding: 14px 16px 6px;
     color: var(--text-dim);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
-    letter-spacing: 0.5px;
+    text-align: right;
   }
-  /* Input row */
+  .group-header.indicator {
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  /* Row — TradingView style: label on right, input on left */
   .row {
-    padding: 8px 16px;
+    padding: 6px 16px;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-    min-height: 40px;
+    gap: 8px;
+    min-height: 36px;
+    font-size: 13px;
   }
+  /* Inline row variant — multiple controls on one line */
   .row .label {
     flex: 1;
     text-align: right;
-    font-size: 14px;
-    color: var(--text);
+    direction: rtl;
   }
-  .row .input,
-  .row .select {
+  .row .label-prefix {
+    color: var(--text-dim);
+    margin-left: 4px;
+  }
+  /* Input - TradingView style */
+  .input {
     background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 6px 10px;
+    padding: 5px 10px;
     color: var(--text);
-    font-size: 14px;
+    font-size: 13px;
+    min-width: 60px;
+    text-align: center;
+    font-family: inherit;
+  }
+  .input.num { min-width: 70px; }
+  .input.wide { min-width: 140px; }
+  /* Select - TradingView dropdown */
+  .select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 24px 5px 10px;
+    color: var(--text);
+    font-size: 13px;
     min-width: 80px;
     text-align: center;
+    position: relative;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+                      linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+    background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%;
+    background-size: 4px 4px;
+    background-repeat: no-repeat;
   }
-  .row .input.wide { min-width: 150px; }
-  .row .input.full { flex: 1; }
+  /* Time picker */
+  .time-picker {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 80px;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+  .time-picker .clock { color: var(--text-dim); font-size: 12px; }
   /* Checkbox */
   .checkbox {
     width: 18px;
@@ -135,102 +183,73 @@
     align-items: center;
     justify-content: center;
     color: #fff;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: bold;
+    flex-shrink: 0;
   }
-  .checkbox.checked {
-    background: var(--green);
-    border-color: var(--green);
-  }
+  .checkbox.checked { background: var(--green); border-color: var(--green); }
   .checkbox.checked::after { content: '✓'; }
-  /* Time selector */
-  .time-picker {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 6px 10px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 100px;
-    justify-content: space-between;
-  }
-  .time-picker .icon { color: var(--text-dim); }
-  /* Recommended badge */
-  .badge {
-    background: var(--green);
-    color: white;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    margin-right: 6px;
-  }
-  .badge.warn { background: var(--accent); }
-  .badge.off  { background: var(--text-dim); }
   /* Info icon */
   .info {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: transparent;
     border: 1px solid var(--text-dim);
     color: var(--text-dim);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 9px;
     flex-shrink: 0;
   }
-  /* Status panel mockup */
-  .preview-panel {
-    margin: 20px 16px;
-    padding: 16px;
-    background: linear-gradient(135deg, #0a0e1a 0%, #131722 100%);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-  }
-  .preview-title {
-    font-size: 16px;
+  /* Recommended badge */
+  .rec {
+    display: inline-block;
+    background: var(--green);
+    color: white;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
     font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--text);
-    display: flex;
-    justify-content: space-between;
+    margin-left: 4px;
+    vertical-align: middle;
   }
-  .preview-row {
+  .rec.off { background: var(--text-dim); }
+  .rec.warn { background: var(--accent); }
+  /* Inline pair — for sub-inputs on same line */
+  .inline-pair {
     display: flex;
-    justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-size: 13px;
+    gap: 6px;
+    align-items: center;
   }
-  .preview-row .v { color: var(--green); font-weight: 500; }
-  .preview-row .v.bad { color: var(--red); }
-  .preview-row .v.warn { color: var(--accent); }
-  /* Sticky bottom CTA */
+  /* Section divider */
+  .sep {
+    height: 1px;
+    background: var(--border);
+    margin: 6px 16px;
+  }
+  /* Sticky CTA */
   .cta-wrap {
     position: sticky;
     bottom: 0;
     background: var(--bg);
-    padding: 12px 16px 24px;
+    padding: 12px 16px 18px;
     border-top: 1px solid var(--border);
     display: flex;
     gap: 10px;
+    z-index: 10;
   }
   .cta {
     flex: 1;
-    padding: 12px;
+    padding: 11px;
     border-radius: 6px;
     text-align: center;
     font-weight: 500;
     font-size: 14px;
-    cursor: pointer;
   }
   .cta.primary { background: var(--blue); color: white; }
   .cta.secondary { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
-  /* Section divider */
-  .sep { height: 1px; background: var(--border); margin: 8px 0; }
-  /* Recommended config callout */
+  /* Callout */
   .callout {
     margin: 12px 16px;
     padding: 12px 14px;
@@ -240,14 +259,31 @@
     font-size: 13px;
   }
   .callout .title { color: var(--green); font-weight: 600; margin-bottom: 6px; }
+  /* Day chip */
+  .day-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+    padding: 6px 16px;
+  }
+  .day-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+  }
   /* Footer */
   .footer {
-    padding: 16px;
+    padding: 14px 16px;
     text-align: center;
     color: var(--text-dim);
     font-size: 12px;
     border-top: 1px solid var(--border);
-    margin-top: 20px;
   }
   .footer a { color: var(--blue); text-decoration: none; }
 </style>
@@ -263,22 +299,22 @@
 <!-- Browser bar -->
 <div class="browser-bar">
   <span>⋮</span>
-  <span>📑 3</span>
+  <span>📑3</span>
   <span>+</span>
   <div class="url">🔒 il.tradingview.com</div>
   <span>⌂</span>
 </div>
 
-<!-- Callout: this is what you'd see -->
+<!-- Helper callout -->
 <div class="callout">
-  <div class="title">📱 ככה זה ייראה בטלפון שלך</div>
-  זה מוקאפ של חלון ההגדרות של <b>v3.4 PropKiller</b> ב-TradingView, עם ה<b>קונפיגורציה המומלצת</b> שכבר ממולאת. גלול למטה כדי לראות הכל.
+  <div class="title">📱 ככה תיראה הקונפיגורציה המומלצת ב-TradingView</div>
+  כל פרמטר של כל אינדיקטור. הערכים המסומנים ב-<span class="rec">REC</span> הם הערכים המומלצים על-פי הסריקה.
 </div>
 
-<!-- Dialog -->
+<!-- Dialog header -->
 <div class="dialog-header">
-  <span class="close">✕</span>
   <span class="title">ProfitBot | Jerusalem v3.4 PropKiller</span>
+  <span class="close">✕</span>
 </div>
 
 <!-- Tabs -->
@@ -289,170 +325,320 @@
   <div class="tab active">תשומות</div>
 </div>
 
-<!-- === FUNDED MODE === -->
-<div class="section">🎯 מצב</div>
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                FUNDED MODE                        ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">🎯 מצב</div>
 <div class="row">
   <span class="info">i</span>
-  <span class="label">💎 Funded Mode (אוטומטית שמרני)</span>
-  <span class="badge off">EVAL</span>
   <span class="checkbox"></span>
+  <span class="label">💎 Funded Mode (אוטומטית שמרני) <span class="rec off">EVAL</span></span>
 </div>
 
-<!-- === SESSIONS === -->
-<div class="section">🕐 סשנים</div>
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                SESSIONS                          ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">🕐 סשנים</div>
 <div class="row">
-  <span class="label">שעות</span>
-  <div class="time-picker"><span class="icon">🕐</span><span>0800-1200</span></div>
-  <span class="label" style="flex:0">Account A</span>
-  <span class="badge">ON</span>
+  <div class="time-picker"><span>1200</span><span class="clock">🕐</span></div>
+  <div class="time-picker"><span>0800</span><span class="clock">🕐</span></div>
   <span class="checkbox checked"></span>
+  <span class="label">✅ Account A (בוקר)</span>
 </div>
 <div class="row">
-  <span class="label">שעות</span>
-  <div class="time-picker"><span class="icon">🕐</span><span>1300-1700</span></div>
-  <span class="label" style="flex:0">Account B</span>
-  <span class="badge off">OFF</span>
+  <div class="time-picker"><span>1700</span><span class="clock">🕐</span></div>
+  <div class="time-picker"><span>1300</span><span class="clock">🕐</span></div>
   <span class="checkbox"></span>
+  <span class="label">Account B (ערב)</span>
 </div>
 
-<!-- === CLOSE === -->
-<div class="section">⏰ סגירה</div>
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                CLOSE                              ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">⏰ סגירה</div>
 <div class="row">
-  <span class="label">סגירה בסוף יום</span>
   <span class="checkbox checked"></span>
+  <span class="label">✅ סגירה בסוף יום</span>
 </div>
 <div class="row">
+  <div class="select">17:00</div>
   <span class="label">🕐 שעה</span>
-  <div class="time-picker"><span>17:00</span><span class="icon">▼</span></div>
 </div>
 <div class="row">
-  <span class="label">חסום N ברים אחרונים</span>
-  <span class="input">3</span>
+  <input class="input num" value="3">
+  <span class="label">חסום N ברים אחרונים של סשן</span>
 </div>
 
-<!-- === RISK === -->
-<div class="section">💰 ניהול סיכון</div>
-<div class="row"><span class="label">חוזים בסיס</span><span class="input">1</span></div>
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                RISK                               ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">💰 ניהול סיכון</div>
 <div class="row">
-  <span class="label">הפסד יומי $</span>
-  <span class="badge">REC</span>
-  <span class="input">700</span>
+  <input class="input num" value="1">
+  <span class="label">חוזים בסיס</span>
 </div>
 <div class="row">
-  <span class="label">רווח יומי $</span>
-  <span class="badge">REC</span>
-  <span class="input">1500</span>
+  <input class="input num" value="700">
+  <span class="label">הפסד יומי $ <span class="rec">REC</span></span>
 </div>
-<div class="row"><span class="label">עסקאות</span><span class="input">4</span></div>
 <div class="row">
-  <span class="label">סטופ טיקים</span>
-  <span class="badge">REC</span>
-  <span class="input">40</span>
-</div>
-<div class="row"><span class="label">RR</span><span class="input">2.0</span></div>
-<div class="row"><span class="label">CD כיוון הפוך</span><span class="input">4</span></div>
-<div class="row"><span class="label">הפסדים רצופים → סגור יום</span><span class="input">3</span></div>
-
-<!-- === PARTIAL TP === -->
-<div class="section">🎯 Breakeven & Partial</div>
-<div class="row">
+  <input class="input num" value="1500">
+  <span class="label">רווח יומי $ <span class="rec">REC</span></span>
   <span class="info">i</span>
-  <span class="label">Partial TP @ 1R + BE</span>
-  <span class="badge">ON</span>
-  <span class="checkbox checked"></span>
 </div>
-<div class="row"><span class="label">% לסגור ב-1R</span><span class="input">50</span></div>
+<div class="row">
+  <input class="input num" value="4">
+  <span class="label">עסקאות יומיות</span>
+</div>
+<div class="row">
+  <input class="input num" value="40">
+  <span class="label">סטופ טיקים <span class="rec">REC</span></span>
+</div>
+<div class="row">
+  <input class="input num" value="2.0">
+  <span class="label">RR</span>
+</div>
+<div class="row">
+  <input class="input num" value="4">
+  <span class="label">CD כיוון הפוך</span>
+</div>
+<div class="row">
+  <input class="input num" value="3">
+  <span class="label">הפסדים רצופים → סגור יום</span>
+</div>
 
-<!-- === PEAK LOCKOUT === -->
-<div class="section">🛡️ Peak Lockout</div>
+<!-- Trailing Stop sub-group -->
 <div class="row">
-  <span class="info">i</span>
-  <span class="label">Intraday Peak Lockout</span>
-  <span class="badge">ON ⭐</span>
-  <span class="checkbox checked"></span>
-</div>
-<div class="row"><span class="label">% נתון בחזרה → נעל</span><span class="input">40</span></div>
-<div class="row"><span class="label">פעיל החל מ-$</span><span class="input">200</span></div>
-
-<!-- === NEWS BLACKOUT === -->
-<div class="section">📰 News Blackout</div>
-<div class="row">
-  <span class="label">News Blackout</span>
-  <span class="badge">ON</span>
-  <span class="checkbox checked"></span>
-</div>
-<div class="row">
-  <span class="label">זמני חדשות</span>
-  <span class="input wide">15:30,15:00,21:00</span>
-</div>
-<div class="row"><span class="label">חיץ ± דקות</span><span class="input">15</span></div>
-
-<!-- === SCALING === -->
-<div class="section">📈 Scaling</div>
-<div class="row">
-  <span class="info">i</span>
-  <span class="label">Auto-Scaling Contracts</span>
-  <span class="badge off">OFF</span>
+  <input class="input num" value="1.5">
+  <input class="input num" value="14">
   <span class="checkbox"></span>
-</div>
-<div class="row"><span class="label">$ להעלאת קומה</span><span class="input">300</span></div>
-<div class="row"><span class="label">חוזים מקסימום</span><span class="input">3</span></div>
-
-<!-- === DAYS === -->
-<div class="section">🗓️ ימים</div>
-<div class="row" style="justify-content: space-around;">
-  <span><span class="checkbox"></span> ש׳</span>
-  <span><span class="checkbox"></span> ו׳</span>
-  <span><span class="checkbox checked"></span> ה׳</span>
-  <span><span class="checkbox checked"></span> ד׳</span>
-  <span><span class="checkbox checked"></span> ג׳</span>
-  <span><span class="checkbox checked"></span> ב׳</span>
-  <span><span class="checkbox checked"></span> א׳</span>
+  <span class="label">🔁 Trailing Stop (ATR · מכפיל)</span>
 </div>
 
-<!-- === INDICATORS === -->
-<div class="section">📡 OR אינדיקטורים</div>
-<div class="row" style="justify-content: space-around;">
-  <span><span class="checkbox checked"></span> VWAP <span class="badge">REC</span></span>
-  <span><span class="checkbox"></span> MACD</span>
-  <span><span class="checkbox"></span> BB</span>
-  <span><span class="checkbox"></span> STOCH</span>
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║          BREAKEVEN & PARTIAL TP                   ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">🎯 Breakeven & Partial</div>
+<div class="row">
+  <span class="info">i</span>
+  <span class="checkbox checked"></span>
+  <span class="label">🎯 Partial TP @ 1R + BE <span class="rec">ON</span></span>
 </div>
-<div class="row" style="justify-content: space-around;">
-  <span><span class="checkbox checked"></span> VOL <span class="badge">REC</span></span>
-  <span><span class="checkbox"></span> RSI</span>
-</div>
-
-<!-- === STATUS PANEL PREVIEW === -->
-<div class="preview-panel">
-  <div class="preview-title">
-    <span>📊 ProfitBot v3.4 PK</span>
-    <span style="color: var(--blue);">🎯 EVAL</span>
-  </div>
-  <div class="preview-row"><span>PnL היום</span><span class="v">$+325</span></div>
-  <div class="preview-row"><span>Peak / Giveback</span><span class="v">$450 ↓28%</span></div>
-  <div class="preview-row"><span>עסקאות</span><span class="v">2 / 4</span></div>
-  <div class="preview-row"><span>חוזים עכשיו</span><span class="v">1</span></div>
-  <div class="preview-row"><span>רצף הפסדים</span><span class="v">0 / 3</span></div>
-  <div class="preview-row"><span>Risk/Trade</span><span class="v">$200</span></div>
-  <div class="preview-row"><span>סשן</span><span class="v">A 08-12</span></div>
-  <div class="preview-row"><span>סטטוס</span><span class="v">🟢 פעיל</span></div>
-  <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-dim); text-align: center;">
-    ↑ זה הפאנל שיופיע בפינה הימנית-עליונה של הגרף בזמן אמת
-  </div>
+<div class="row">
+  <input class="input num" value="50">
+  <span class="label">% לסגור ב-1R</span>
 </div>
 
-<!-- Callout: chart preview -->
-<div class="callout">
-  <div class="title">📈 על הגרף עצמו תראה:</div>
-  • רקע <span style="color: #2196F3;">כחול</span> בשעות 08-12 (Account A פעיל)<br>
-  • <span style="color: #FF9800;">VWAP כתום</span> + <span style="color: #4CAF50;">קווי BB ירוקים</span><br>
-  • משולש <span style="color: var(--green);">🟢 L</span> או <span style="color: var(--red);">🔴 S</span> בכל כניסה<br>
-  • קווים מקווקווים ירוק (TP) ואדום (SL)<br>
-  • קו <span style="color: #FFB300;">צהוב מנוקד = TP חלקי 1R</span><br>
-  • תווית <span style="color: #FFB300;">🔒 BE</span> כשה-SL זז לbreakeven<br>
-  • רקע <span style="color: var(--accent);">כתום</span> בזמן News Blackout (חסום)<br>
-  • רקע <span style="color: var(--text-dim);">אפור</span> ב-3 ברים האחרונים של הסשן (חסום)
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                PEAK LOCKOUT                       ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">🛡️ Peak Lockout</div>
+<div class="row">
+  <span class="info">i</span>
+  <span class="checkbox checked"></span>
+  <span class="label">🛡️ Intraday Peak Lockout <span class="rec">⭐ ON</span></span>
+</div>
+<div class="row">
+  <input class="input num" value="40">
+  <span class="label">% נתון בחזרה → נעל</span>
+</div>
+<div class="row">
+  <input class="input num" value="200">
+  <span class="label">פעיל החל מ-$</span>
+  <span class="info">i</span>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                NEWS BLACKOUT                      ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">📰 News Blackout</div>
+<div class="row">
+  <span class="checkbox checked"></span>
+  <span class="label">📰 News Blackout <span class="rec">ON</span></span>
+</div>
+<div class="row">
+  <input class="input wide" value="15:30,15:00,21:00">
+  <span class="label">זמני חדשות (פסיק)</span>
+  <span class="info">i</span>
+</div>
+<div class="row">
+  <input class="input num" value="15">
+  <span class="label">חיץ ± דקות</span>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                SCALING                            ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">📈 Scaling</div>
+<div class="row">
+  <span class="info">i</span>
+  <span class="checkbox"></span>
+  <span class="label">📈 Auto-Scaling Contracts <span class="rec off">OFF</span></span>
+</div>
+<div class="row">
+  <input class="input num" value="300">
+  <span class="label">$ להעלאת קומה</span>
+</div>
+<div class="row">
+  <input class="input num" value="3">
+  <span class="label">חוזים מקסימום</span>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                DAYS + REVERSE                     ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">🗓️ ימים + היפוך</div>
+<div class="day-row">
+  <span class="day-chip"><span class="checkbox"></span> ש׳</span>
+  <span class="day-chip"><span class="checkbox"></span> ו׳</span>
+  <span class="day-chip"><span class="checkbox checked"></span> ה׳</span>
+  <span class="day-chip"><span class="checkbox checked"></span> ד׳</span>
+  <span class="day-chip"><span class="checkbox checked"></span> ג׳</span>
+  <span class="day-chip"><span class="checkbox checked"></span> ב׳</span>
+  <span class="day-chip"><span class="checkbox checked"></span> א׳</span>
+</div>
+<div class="row">
+  <span class="checkbox"></span>
+  <span class="label">🔄 היפוך</span>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                OR INDICATORS                      ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">📡 OR אינדיקטורים</div>
+<div class="day-row">
+  <span class="day-chip"><span class="checkbox checked"></span> VWAP <span class="rec">REC</span></span>
+  <span class="day-chip"><span class="checkbox"></span> MACD</span>
+  <span class="day-chip"><span class="checkbox"></span> BB</span>
+  <span class="day-chip"><span class="checkbox"></span> STOCH</span>
+</div>
+<div class="day-row">
+  <span class="day-chip"><span class="checkbox checked"></span> VOL <span class="rec">REC</span></span>
+  <span class="day-chip"><span class="checkbox"></span> RSI</span>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                VISUAL                             ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">🎨 ויזואל</div>
+<div class="day-row">
+  <span class="day-chip"><span class="checkbox checked"></span> 📊 פאנל</span>
+  <span class="day-chip"><span class="checkbox checked"></span> 🏷️ תוויות</span>
+  <span class="day-chip"><span class="checkbox checked"></span> 🎨 רקע</span>
+  <span class="day-chip"><span class="checkbox checked"></span> 📏 SL/TP</span>
+</div>
+<div class="row">
+  <input class="input num" value="40">
+  <div class="select">small</div>
+  <span class="label">אורך קווים · גודל תווית</span>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║                TRADERPOST                         ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="group-header">🔗 TraderPost</div>
+<div class="row">
+  <input class="input wide" value="YOUR_TOKEN_HERE">
+  <span class="label">Token</span>
+</div>
+<div class="row">
+  <input class="input num" value="NQ1!">
+  <span class="label">Ticker</span>
+</div>
+
+<!-- ╔════════════════════════════════════════════════════════╗ -->
+<!-- ║                  RSI PARAMS                            ║ -->
+<!-- ╚════════════════════════════════════════════════════════╝ -->
+<div class="group-header indicator">[ RSI ] L14 OS30 OB70</div>
+<div class="row">
+  <div class="select">סגירה</div>
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Source</span>
+</div>
+<div class="row">
+  <input class="input num" value="14">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Length</span>
+</div>
+<div class="row">
+  <input class="input num" value="30">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> OverSold</span>
+  <span class="info">i</span>
+</div>
+<div class="row">
+  <input class="input num" value="70">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> OverBought</span>
+</div>
+
+<!-- ╔════════════════════════════════════════════════════════╗ -->
+<!-- ║                  BB PARAMS                             ║ -->
+<!-- ╚════════════════════════════════════════════════════════╝ -->
+<div class="group-header indicator">[ BB ] L18</div>
+<div class="row">
+  <div class="select">סגירה</div>
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Source</span>
+</div>
+<div class="row">
+  <input class="input num" value="18">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Length</span>
+</div>
+<div class="row">
+  <input class="input num" value="2.0">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> StDev</span>
+</div>
+
+<!-- ╔════════════════════════════════════════════════════════╗ -->
+<!-- ║                  VWAP PARAMS                           ║ -->
+<!-- ╚════════════════════════════════════════════════════════╝ -->
+<div class="group-header indicator">[ VWAP ] יומי</div>
+<div class="row">
+  <div class="select">סגירה</div>
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Source</span>
+</div>
+<div class="row">
+  <div class="select">1 יום</div>
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Anchor period</span>
+</div>
+
+<!-- ╔════════════════════════════════════════════════════════╗ -->
+<!-- ║                  MACD PARAMS                           ║ -->
+<!-- ╚════════════════════════════════════════════════════════╝ -->
+<div class="group-header indicator">[ MACD ] F12 S26 Sig9</div>
+<div class="row">
+  <div class="select">סגירה</div>
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Source</span>
+</div>
+<div class="row">
+  <input class="input num" value="12">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Fast</span>
+</div>
+<div class="row">
+  <input class="input num" value="26">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Slow</span>
+</div>
+<div class="row">
+  <input class="input num" value="9">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Signal</span>
+</div>
+
+<!-- ╔════════════════════════════════════════════════════════╗ -->
+<!-- ║                  STOCH PARAMS                          ║ -->
+<!-- ╚════════════════════════════════════════════════════════╝ -->
+<div class="group-header indicator">[ STOCH ] K6 Ks1 (cross 50)</div>
+<div class="row">
+  <input class="input num" value="6">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> K</span>
+</div>
+<div class="row">
+  <input class="input num" value="1">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> Ks</span>
+</div>
+
+<!-- ╔════════════════════════════════════════════════════════╗ -->
+<!-- ║                  VOL PARAMS                            ║ -->
+<!-- ╚════════════════════════════════════════════════════════╝ -->
+<div class="group-header indicator">[ VOL ] Crossover</div>
+<div class="row">
+  <input class="input num" value="20">
+  <span class="label"><span class="label-prefix">&lt;&lt;</span> VOL MA</span>
 </div>
 
 <!-- Sticky CTA -->
@@ -462,9 +648,11 @@
 </div>
 
 <div class="footer">
-  📂 הקוד המלא: <br>
+  📂 קוד מקור:<br>
   <a href="https://github.com/pinto1212121212-create/Propit.bot-tov/blob/claude/review-code-verify-Pr4tz/ProfitBot_Jerusalem_v3.4_PropKiller.pine">ProfitBot v3.4 PropKiller</a><br><br>
-  💡 ההגדרות שמסומנות ב-<span class="badge">REC</span> הן הערכים שאני ממליץ עליהם.
+  💡 שדות עם תג <span class="rec">REC</span> ירוק = ערכים מומלצים מהסריקה<br>
+  💡 שדות עם תג <span class="rec off">OFF</span> אפור = מושבת בכוונה<br>
+  💡 כל ערך בקופסה זה הברירת-מחדל של הקובץ — אין צורך לשנות
 </div>
 
 </body>

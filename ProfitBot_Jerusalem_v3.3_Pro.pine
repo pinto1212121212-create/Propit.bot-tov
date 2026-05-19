@@ -1,0 +1,415 @@
+//@version=5
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║          ProfitBot | Jerusalem v3.3 — Professional Prop Firm Edition    ║
+// ║          NQ1! · 15min · 2 Accounts · TraderPost Webhook                 ║
+// ╠══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                          ║
+// ║  HOW A PRO WOULD CONFIGURE THIS:                                         ║
+// ║                                                                          ║
+// ║  • TWO accounts, two sessions, OR logic:                                 ║
+// ║      Account A → 08:00-12:00 Asia/Jerusalem (European morning)           ║
+// ║      Account B → 13:00-16:00 Asia/Jerusalem (Pre-NY positioning)         ║
+// ║                                                                          ║
+// ║  • 4 indicators in OR, hand-picked for those hours:                      ║
+// ║      STOCH(6,1)  → mean reversion in ranging European session            ║
+// ║      BB(18)      → pullback continuation                                 ║
+// ║      MACD(12/26) → momentum kick into NY                                 ║
+// ║      VWAP        → institutional reference (matters most pre-NY)         ║
+// ║      RSI / VOL   → off by default (lag + noise on 15min)                 ║
+// ║                                                                          ║
+// ║  • Risk sized for the tightest prop firm (TopStep 50K = $1100 daily):    ║
+// ║      max_loss   = $700   (cushion vs TopStep limit, room for slippage)   ║
+// ║      max_profit = $1500  (let winners run — don't cap your good days)    ║
+// ║      stop_ticks = 30      ($150 risk per trade, realistic for 15min NQ)  ║
+// ║      rr_ratio   = 2.0     (TP $300 — 2× the risk)                        ║
+// ║      max_trades = 4       (per 4-hour session)                           ║
+// ║      cd_opp     = 4       (4 bars cooldown after reversed direction)     ║
+// ║                                                                          ║
+// ║  • TWO new safety layers vs v3.2:                                        ║
+// ║      A) NO-ENTRY in the final 3 bars of session (avoid forced-close      ║
+// ║         exits that miss SL/TP and slip to market price).                 ║
+// ║      B) 3 CONSECUTIVE LOSSES → stop for the day. The market isn't        ║
+// ║         giving you a read — go home.                                     ║
+// ║                                                                          ║
+// ║  • All-trades JSON payload to TraderPost — unchanged from v3.2.          ║
+// ║                                                                          ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+strategy("ProfitBot | Jerusalem v3.3 Pro", overlay=true, default_qty_type=strategy.fixed,
+     default_qty_value=1, currency=currency.USD, initial_capital=10000,
+     commission_type=strategy.commission.cash_per_contract, commission_value=2,
+     max_labels_count=500, max_lines_count=500, process_orders_on_close=true)
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS — SESSIONS (PROP-FIRM SPLIT)
+// ══════════════════════════════════════════════════════════════════════════
+
+use_s1     = input.bool(true,  title="✅ Account A (בוקר)", group="🕐 סשנים", inline="s1")
+sess1      = input.session("0800-1200", title="שעות", group="🕐 סשנים", inline="s1")
+use_s2     = input.bool(false, title="✅ Account B (ערב)", group="🕐 סשנים", inline="s2")
+sess2      = input.session("1300-1600", title="שעות", group="🕐 סשנים", inline="s2")
+use_close  = input.bool(true,  title="✅ סגירה בסוף יום", group="⏰ סגירה", inline="cl")
+close_time = input.string("16:00", title="🕐", group="⏰ סגירה", inline="cl",
+     options=["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00",
+              "16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"])
+last_bar_guard = input.int(3, title="חסום N ברים אחרונים של סשן", minval=0, maxval=8, group="⏰ סגירה")
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS — RISK (Prop-Firm sized)
+// ══════════════════════════════════════════════════════════════════════════
+
+contracts    = input.int(1,    title="חוזים",       minval=1, maxval=100,             group="💰 ניהול סיכון", inline="r1")
+max_loss     = input.float(700,title="הפסד יומי $",  minval=0,                         group="💰 ניהול סיכון", inline="r1")
+max_profit   = input.float(1500,title="רווח יומי $",  minval=0,                        group="💰 ניהול סיכון", inline="r1")
+max_trades   = input.int(4,    title="עסקאות",       minval=1, maxval=50,              group="💰 ניהול סיכון", inline="r2")
+stop_ticks   = input.int(30,   title="סטופ טיקים",   minval=1, maxval=2000,            group="💰 ניהול סיכון", inline="r2")
+rr_ratio     = input.float(2.0,title="RR",           minval=1.0, maxval=20, step=0.5,  group="💰 ניהול סיכון", inline="r2")
+cd_opp       = input.int(4,    title="CD כיוון הפוך", minval=1, maxval=20,             group="💰 ניהול סיכון", inline="r3")
+loss_streak  = input.int(3,    title="הפסדים רצופים → סגור יום", minval=2, maxval=10,  group="💰 ניהול סיכון", inline="r3")
+use_trail    = input.bool(false,title="🔁 Trailing Stop", group="💰 ניהול סיכון", inline="trail")
+trail_atr    = input.int(14,   title="ATR",   minval=1, maxval=50,            group="💰 ניהול סיכון", inline="trail")
+trail_mult   = input.float(1.5,title="מכפיל", minval=0.5, maxval=5, step=0.5, group="💰 ניהול סיכון", inline="trail")
+
+use_sun = input.bool(true,  title="א׳", group="🗓️ ימים + היפוך", inline="days")
+use_mon = input.bool(true,  title="ב׳", group="🗓️ ימים + היפוך", inline="days")
+use_tue = input.bool(true,  title="ג׳", group="🗓️ ימים + היפוך", inline="days")
+use_wed = input.bool(true,  title="ד׳", group="🗓️ ימים + היפוך", inline="days")
+use_thu = input.bool(true,  title="ה׳", group="🗓️ ימים + היפוך", inline="days")
+use_fri = input.bool(false, title="ו׳", group="🗓️ ימים + היפוך", inline="days")
+use_sat = input.bool(false, title="ש׳", group="🗓️ ימים + היפוך", inline="days")
+ind_rev = input.bool(false, title="🔄 היפוך",  group="🗓️ ימים + היפוך", inline="days")
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS — INDICATORS (PRO selection for NQ 15min EU + pre-NY)
+// ══════════════════════════════════════════════════════════════════════════
+
+use_stoch  = input.bool(true,  title="STOCH",   group="📡 OR אינדיקטורים", inline="or1")
+use_bb     = input.bool(true,  title="BB",      group="📡 OR אינדיקטורים", inline="or1")
+use_macd   = input.bool(true,  title="MACD",    group="📡 OR אינדיקטורים", inline="or1")
+use_vwap   = input.bool(true,  title="VWAP",    group="📡 OR אינדיקטורים", inline="or1")
+use_rsi    = input.bool(false, title="RSI",     group="📡 OR אינדיקטורים", inline="or2")
+use_vol    = input.bool(false, title="VOL",     group="📡 OR אינדיקטורים", inline="or2")
+
+show_sl_tp  = input.bool(true,      title="📏 SL/TP",  group="🎨 ויזואל", inline="vis")
+show_bg     = input.bool(true,      title="🎨 רקע",    group="🎨 ויזואל", inline="vis")
+show_labels = input.bool(true,      title="🏷️ תוויות", group="🎨 ויזואל", inline="vis")
+show_stats  = input.bool(true,      title="📊 פאנל",   group="🎨 ויזואל", inline="vis")
+label_size  = input.string("small", title="גודל", options=["tiny","small","normal","large"], group="🎨 ויזואל", inline="vis2")
+line_len    = input.int(40,         title="אורך קווים", minval=5, maxval=200, group="🎨 ויזואל", inline="vis2")
+
+tp_token  = input.string("YOUR_TOKEN_HERE", title="Token",    group="🔗 TraderPost")
+tp_ticker = input.string("NQ1!",            title="Ticker",   group="🔗 TraderPost")
+tp_qty    = input.int(1,                    title="Quantity", minval=1, group="🔗 TraderPost")
+
+rsi_src = input.source(close, title="Source", group="[ RSI ] L14 OS30 OB70", inline="rsi")
+rsi_len = input.int(14, title="Length", minval=1, group="[ RSI ] L14 OS30 OB70", inline="rsi")
+rsi_os  = input.int(30, title="OS", minval=0,  maxval=50,  group="[ RSI ] L14 OS30 OB70", inline="rsi")
+rsi_ob  = input.int(70, title="OB", minval=50, maxval=100, group="[ RSI ] L14 OS30 OB70", inline="rsi")
+
+bb_src = input.source(close, title="Source", group="[ BB ] L18", inline="bb")
+bb_len = input.int(18,    title="Length", minval=1, group="[ BB ] L18", inline="bb")
+bb_std = input.float(2.0, title="StDev",  minval=0.1, step=0.1, group="[ BB ] L18", inline="bb")
+
+vw_src = input.source(close, title="Source", group="[ VWAP ] יומי", inline="vwap")
+
+ma_src  = input.source(close, title="Source", group="[ MACD ] F12 S26 Sig9", inline="macd")
+ma_fast = input.int(12, title="Fast",   minval=1, group="[ MACD ] F12 S26 Sig9", inline="macd")
+ma_slow = input.int(26, title="Slow",   minval=1, group="[ MACD ] F12 S26 Sig9", inline="macd")
+ma_sig  = input.int(9,  title="Signal", minval=1, group="[ MACD ] F12 S26 Sig9", inline="macd")
+
+stoch_k  = input.int(6,  title="K",  minval=1, group="[ STOCH ] K6 Ks1 (cross 50)", inline="stoch")
+stoch_ks = input.int(1,  title="Ks", minval=1, group="[ STOCH ] K6 Ks1 (cross 50)", inline="stoch")
+
+vol_ma_len = input.int(20, title="VOL MA", minval=1, group="[ VOL ] Crossover", inline="vol")
+
+// ══════════════════════════════════════════════════════════════════════════
+// SESSION & DAY
+// ══════════════════════════════════════════════════════════════════════════
+
+tz        = "Asia/Jerusalem"
+dow       = dayofweek(time, tz)
+isWeekday = dow != dayofweek.saturday
+inS1      = use_s1 and isWeekday and not na(time("1", sess1, tz))
+inS2      = use_s2 and isWeekday and not na(time("1", sess2, tz))
+inSession = inS1 or inS2
+
+h           = hour(time, tz)
+mn          = minute(time, tz)
+hm          = h * 100 + mn
+close_h_val = int(str.tonumber(str.substring(close_time, 0, 2)))
+close_m_val = int(str.tonumber(str.substring(close_time, 3, 5)))
+close_hm    = close_h_val * 100 + close_m_val
+
+// Last-N-bar guard — parsed from the session string, no forward-looking
+sess1_end_h   = int(str.tonumber(str.substring(sess1, 5, 7)))
+sess1_end_m   = int(str.tonumber(str.substring(sess1, 7, 9)))
+sess1_end_min = sess1_end_h * 60 + sess1_end_m
+sess2_end_h   = int(str.tonumber(str.substring(sess2, 5, 7)))
+sess2_end_m   = int(str.tonumber(str.substring(sess2, 7, 9)))
+sess2_end_min = sess2_end_h * 60 + sess2_end_m
+
+cur_min        = h * 60 + mn
+bars_to_end_s1 = (sess1_end_min - cur_min) / 15
+bars_to_end_s2 = (sess2_end_min - cur_min) / 15
+inLastBars     = (inS1 and bars_to_end_s1 > 0 and bars_to_end_s1 <= last_bar_guard) or
+                 (inS2 and bars_to_end_s2 > 0 and bars_to_end_s2 <= last_bar_guard)
+
+// ══════════════════════════════════════════════════════════════════════════
+// DAILY RISK STATE
+// ══════════════════════════════════════════════════════════════════════════
+
+isNewDay = ta.change(time("D")) != 0
+
+var float dayEq         = strategy.equity
+var int   dayCnt        = 0
+var int   lastEntryBar  = -999
+var int   lastEntryDir  = 0
+var int   consecLosses  = 0
+var float lastClosedEq  = strategy.equity
+var bool  dayLocked     = false
+
+if isNewDay
+    dayEq        := strategy.equity
+    dayCnt       := 0
+    lastEntryBar := -999
+    lastEntryDir := 0
+    consecLosses := 0
+    dayLocked    := false
+    lastClosedEq := strategy.equity
+
+// Track closed-trade P&L to count consecutive losses
+if strategy.closedtrades > strategy.closedtrades[1]
+    lastTradePnL = strategy.closedtrades.profit(strategy.closedtrades - 1)
+    if lastTradePnL < 0
+        consecLosses := consecLosses + 1
+    else
+        consecLosses := 0
+    if consecLosses >= loss_streak
+        dayLocked := true
+
+dailyPnL      = strategy.equity - dayEq
+dailyLossOk   = dailyPnL > -math.abs(max_loss)
+dailyProfitOk = dailyPnL <  math.abs(max_profit)
+tradesOk      = dayCnt   < max_trades
+streakOk      = not dayLocked
+
+dayOk = (dow == dayofweek.sunday    and use_sun) or
+        (dow == dayofweek.monday    and use_mon) or
+        (dow == dayofweek.tuesday   and use_tue) or
+        (dow == dayofweek.wednesday and use_wed) or
+        (dow == dayofweek.thursday  and use_thu) or
+        (dow == dayofweek.friday    and use_fri) or
+        (dow == dayofweek.saturday  and use_sat)
+
+baseOk         = inSession and dailyLossOk and dailyProfitOk and tradesOk and dayOk
+                 and streakOk and not inLastBars and strategy.position_size == 0
+barsSinceEntry = bar_index - lastEntryBar
+
+// ══════════════════════════════════════════════════════════════════════════
+// INDICATORS — clean single-asset only
+// ══════════════════════════════════════════════════════════════════════════
+
+rsiVal   = ta.rsi(rsi_src, rsi_len)
+rsiLong  = rsiVal <= rsi_os
+rsiShort = rsiVal >= rsi_ob
+
+[bbMid, bbUp, bbDn] = ta.bb(bb_src, bb_len, bb_std)
+bbLong  = ta.crossunder(close, bbMid) and inSession and inSession[1]
+bbShort = ta.crossover(close,  bbMid) and inSession and inSession[1]
+
+vwapVal   = ta.vwap(vw_src)
+vwapLong  = ta.crossunder(close, vwapVal) and inSession and inSession[1]
+vwapShort = ta.crossover(close,  vwapVal) and inSession and inSession[1]
+
+[_macdLine, _sigLine, macdHist] = ta.macd(ma_src, ma_fast, ma_slow, ma_sig)
+macdLong  = ta.crossover(macdHist,  0) and inSession and inSession[1]
+macdShort = ta.crossunder(macdHist, 0) and inSession and inSession[1]
+
+stochK     = ta.sma(ta.stoch(close, high, low, stoch_k), stoch_ks)
+stochLong  = ta.crossover(stochK,  50) and inSession and inSession[1]
+stochShort = ta.crossunder(stochK, 50) and inSession and inSession[1]
+
+trueRange    = math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
+trMA         = ta.sma(trueRange, vol_ma_len)
+volSpikeRaw  = (trueRange > trMA) and (trueRange[1] <= trMA[1])
+volSpikeLong = volSpikeRaw and close > open
+volSpikeShort= volSpikeRaw and close < open
+
+// ══════════════════════════════════════════════════════════════════════════
+// STRATEGY LOGIC
+// ══════════════════════════════════════════════════════════════════════════
+
+orLong  = (use_stoch and stochLong)    or (use_bb   and bbLong)   or
+          (use_macd  and macdLong)     or (use_vwap and vwapLong) or
+          (use_rsi   and rsiLong)      or (use_vol  and volSpikeLong)
+
+orShort = (use_stoch and stochShort)   or (use_bb   and bbShort)   or
+          (use_macd  and macdShort)    or (use_vwap and vwapShort) or
+          (use_rsi   and rsiShort)     or (use_vol  and volSpikeShort)
+
+longSig  = ind_rev ? orShort : orLong
+shortSig = ind_rev ? orLong  : orShort
+
+canLong  = baseOk and (lastEntryDir == 0 or lastEntryDir == 1  or (lastEntryDir == -1 and barsSinceEntry >= cd_opp))
+canShort = baseOk and (lastEntryDir == 0 or lastEntryDir == -1 or (lastEntryDir == 1  and barsSinceEntry >= cd_opp))
+
+tick     = syminfo.mintick
+sl_long  = close - stop_ticks * tick
+tp_long  = close + stop_ticks * tick * rr_ratio
+sl_short = close + stop_ticks * tick
+tp_short = close - stop_ticks * tick * rr_ratio
+
+long_msg  = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"buy","quantity":"'  + str.tostring(tp_qty) + '","orderType":"market"}'
+short_msg = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"sell","quantity":"' + str.tostring(tp_qty) + '","orderType":"market"}'
+close_msg = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"exit","quantity":"' + str.tostring(tp_qty) + '","orderType":"market"}'
+
+lblSize = label_size == "tiny" ? size.tiny : label_size == "small" ? size.small : label_size == "large" ? size.large : size.normal
+ind_txt = (use_stoch ? "STOCH " : "") + (use_bb ? "BB " : "") + (use_macd ? "MACD " : "") + (use_vwap ? "VWAP " : "") + (use_rsi ? "RSI " : "") + (use_vol ? "VOL" : "")
+
+// ══════════════════════════════════════════════════════════════════════════
+// TRAILING STOP
+// ══════════════════════════════════════════════════════════════════════════
+
+atrTrail             = use_trail ? ta.atr(trail_atr) : 0.0
+var float trailLevel = na
+var float trailEntry = na
+var int   trailDir   = 0
+
+if use_trail
+    if strategy.position_size > 0
+        trailLevel := na(trailLevel) ? close - atrTrail * trail_mult : math.max(trailLevel, close - atrTrail * trail_mult)
+    else if strategy.position_size < 0
+        trailLevel := na(trailLevel) ? close + atrTrail * trail_mult : math.min(trailLevel, close + atrTrail * trail_mult)
+    else
+        trailLevel := na
+
+    if strategy.position_size != 0 and strategy.position_size[1] == 0
+        trailEntry := close
+        trailDir   := strategy.position_size > 0 ? 1 : -1
+
+trailHitLong   = use_trail and strategy.position_size > 0 and not na(trailLevel) and close < trailLevel
+trailHitShort  = use_trail and strategy.position_size < 0 and not na(trailLevel) and close > trailLevel
+trailPnL       = trailDir == 1 ? (close - trailEntry) : (trailEntry - close)
+trailPnLDollar = trailPnL * syminfo.pointvalue * contracts
+
+if trailHitLong or trailHitShort
+    trailResult = trailPnLDollar >= 0 ? "✅ +" + str.tostring(math.round(trailPnLDollar, 0)) + "$" : "❌ " + str.tostring(math.round(trailPnLDollar, 0)) + "$"
+    strategy.close_all(comment="🔁 Trail", alert_message=close_msg)
+    if show_labels
+        label.new(bar_index, trailDir == 1 ? low : high, text="🔁 Trail\n" + trailResult, color=trailPnLDollar >= 0 ? color.new(#00C853, 0) : color.new(#EF5350, 0), textcolor=color.white, style=trailDir == 1 ? label.style_label_up : label.style_label_down, size=size.small)
+    trailLevel := na
+
+// ══════════════════════════════════════════════════════════════════════════
+// ENTRIES
+// ══════════════════════════════════════════════════════════════════════════
+
+if longSig and canLong
+    strategy.entry("Long", strategy.long, qty=contracts, comment="🟢 L", alert_message=long_msg)
+    if use_trail
+        strategy.exit("TP Long", "Long", limit=tp_long, alert_message=close_msg)
+    else
+        strategy.exit("SL/TP Long", "Long", stop=sl_long, limit=tp_long, alert_message=close_msg)
+    dayCnt       := dayCnt + 1
+    lastEntryBar := bar_index
+    lastEntryDir := 1
+    if show_labels
+        label.new(bar_index, low, text="▲ Long @" + str.tostring(math.round(close, 2)) + "\n" + ind_txt, color=color.new(#1565C0, 0), textcolor=color.white, style=label.style_label_up, size=lblSize)
+    if show_sl_tp
+        line.new(bar_index, tp_long, bar_index + line_len, tp_long, color=color.new(#00C853, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        label.new(bar_index + line_len, tp_long, "TP", color=color.new(#00C853, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+        if not use_trail
+            line.new(bar_index, sl_long, bar_index + line_len, sl_long, color=color.new(#EF5350, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + line_len, sl_long, "SL", color=color.new(#EF5350, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+
+if shortSig and canShort and not (longSig and canLong)
+    strategy.entry("Short", strategy.short, qty=contracts, comment="🔴 S", alert_message=short_msg)
+    if use_trail
+        strategy.exit("TP Short", "Short", limit=tp_short, alert_message=close_msg)
+    else
+        strategy.exit("SL/TP Short", "Short", stop=sl_short, limit=tp_short, alert_message=close_msg)
+    dayCnt       := dayCnt + 1
+    lastEntryBar := bar_index
+    lastEntryDir := -1
+    if show_labels
+        label.new(bar_index, high, text="▼ Short @" + str.tostring(math.round(close, 2)) + "\n" + ind_txt, color=color.new(#B71C1C, 0), textcolor=color.white, style=label.style_label_down, size=lblSize)
+    if show_sl_tp
+        line.new(bar_index, tp_short, bar_index + line_len, tp_short, color=color.new(#00C853, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+        label.new(bar_index + line_len, tp_short, "TP", color=color.new(#00C853, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+        if not use_trail
+            line.new(bar_index, sl_short, bar_index + line_len, sl_short, color=color.new(#EF5350, 0), width=1, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + line_len, sl_short, "SL", color=color.new(#EF5350, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny, xloc=xloc.bar_index)
+
+// ══════════════════════════════════════════════════════════════════════════
+// FORCED CLOSES
+// ══════════════════════════════════════════════════════════════════════════
+
+closeReason = use_close and hm >= close_hm ? "⏰ סגירה" :
+              not inSession                ? "🏁 סשן"  :
+              not dailyLossOk              ? "❌ הפסד" :
+              not dailyProfitOk            ? "✅ רווח" :
+              dayLocked                    ? "🛑 רצף הפסדים" : ""
+
+if closeReason != "" and strategy.position_size != 0
+    strategy.close_all(comment=closeReason, alert_message=close_msg)
+
+// ══════════════════════════════════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════════════════════════════════
+
+bgcolor(show_bg and inS1 ? color.new(#2196F3, 93) : na)
+bgcolor(show_bg and inS2 ? color.new(#4CAF50, 93) : na)
+plot(bbUp,     "BB Upper", color.new(#2196F3, 30), linewidth=1)
+plot(bbMid,    "BB Mid",   color.new(#FF9800,  0), linewidth=2)
+plot(bbDn,     "BB Lower", color.new(#2196F3, 30), linewidth=1)
+plot(vwapVal,  "VWAP",     color.new(#4CAF50,  0), linewidth=2)
+plot(macdHist, "MACD Hist", color=macdHist >= 0 ? color.new(#00E676, 0) : color.new(#EF5350, 0), style=plot.style_columns)
+plot(volume,   "Volume",   display=display.none)
+plotshape(longSig  and canLong,                               title="LONG",  location=location.belowbar, color=color.new(#00C853, 0), style=shape.triangleup,   size=size.small, text="L")
+plotshape(shortSig and canShort and not(longSig and canLong), title="SHORT", location=location.abovebar, color=color.new(#EF5350, 0), style=shape.triangledown, size=size.small, text="S")
+plot(use_trail and strategy.position_size != 0 ? trailLevel : na, "🔁 Trailing Stop", color=color.new(#FF6F00, 0), linewidth=2, style=plot.style_line)
+
+// ══════════════════════════════════════════════════════════════════════════
+// LIVE STATS PANEL (top-right) — what a pro keeps an eye on
+// ══════════════════════════════════════════════════════════════════════════
+
+var table stats = table.new(position.top_right, 2, 7, border_width=1)
+if show_stats and barstate.islast
+    pnl_color = dailyPnL >= 0 ? color.new(#00C853, 20) : color.new(#EF5350, 20)
+    table.cell(stats, 0, 0, "📊 ProfitBot v3.3 Pro", text_color=color.white, bgcolor=color.new(#1565C0, 0), text_size=size.small)
+    table.cell(stats, 1, 0, "",                       text_color=color.white, bgcolor=color.new(#1565C0, 0), text_size=size.small)
+    table.cell(stats, 0, 1, "PnL היום", text_size=size.small)
+    table.cell(stats, 1, 1, "$" + str.tostring(math.round(dailyPnL, 0)), bgcolor=pnl_color, text_color=color.white, text_size=size.small)
+    table.cell(stats, 0, 2, "עסקאות", text_size=size.small)
+    table.cell(stats, 1, 2, str.tostring(dayCnt) + " / " + str.tostring(max_trades), text_size=size.small)
+    table.cell(stats, 0, 3, "רצף הפסדים", text_size=size.small)
+    table.cell(stats, 1, 3, str.tostring(consecLosses) + " / " + str.tostring(loss_streak),
+        bgcolor=consecLosses >= loss_streak - 1 ? color.new(#EF5350, 40) : na, text_size=size.small)
+    table.cell(stats, 0, 4, "סשן", text_size=size.small)
+    table.cell(stats, 1, 4, inS1 ? "A 08-12" : inS2 ? "B 13-16" : "—",
+        bgcolor=inSession ? color.new(#4CAF50, 70) : color.new(#EF5350, 70), text_size=size.small)
+    table.cell(stats, 0, 5, "Risk/Trade",  text_size=size.small)
+    table.cell(stats, 1, 5, "$" + str.tostring(math.round(stop_ticks * tick * syminfo.pointvalue * contracts, 0)), text_size=size.small)
+    table.cell(stats, 0, 6, "סטטוס", text_size=size.small)
+    table.cell(stats, 1, 6, dayLocked ? "🛑 נעול" : not dailyLossOk ? "❌ הפסד" : not dailyProfitOk ? "✅ רווח" : inLastBars ? "⏰ סוף סשן" : baseOk ? "🟢 פעיל" : "⚪ ממתין",
+        text_size=size.small)
+
+// ══════════════════════════════════════════════════════════════════════════
+// DATA WINDOW EXPORT
+// ══════════════════════════════════════════════════════════════════════════
+
+plot(dayofweek(time, tz),                  "DOW",          display=display.data_window)
+plot(stochLong  ? 1 : 0,                   "STOCH Long",   display=display.data_window)
+plot(stochShort ? 1 : 0,                   "STOCH Short",  display=display.data_window)
+plot(bbLong     ? 1 : 0,                   "BB Long",      display=display.data_window)
+plot(bbShort    ? 1 : 0,                   "BB Short",     display=display.data_window)
+plot(macdLong   ? 1 : 0,                   "MACD Long",    display=display.data_window)
+plot(macdShort  ? 1 : 0,                   "MACD Short",   display=display.data_window)
+plot(vwapLong   ? 1 : 0,                   "VWAP Long",    display=display.data_window)
+plot(vwapShort  ? 1 : 0,                   "VWAP Short",   display=display.data_window)
+plot(rsiLong    ? 1 : 0,                   "RSI Long",     display=display.data_window)
+plot(rsiShort   ? 1 : 0,                   "RSI Short",    display=display.data_window)
+plot(volSpikeLong  ? 1 : 0,                "VOL Long",     display=display.data_window)
+plot(volSpikeShort ? 1 : 0,                "VOL Short",    display=display.data_window)
+plot(consecLosses,                         "Loss Streak",  display=display.data_window)
+plot(dayLocked ? 1 : 0,                    "Day Locked",   display=display.data_window)
+plot(inLastBars ? 1 : 0,                   "Last-Bar Guard", display=display.data_window)

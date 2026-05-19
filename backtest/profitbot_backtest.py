@@ -505,17 +505,19 @@ def make_synthetic(days: int = 60, seed: int = 42) -> pd.DataFrame:
     start = datetime(2026, 1, 1, 0, 0, tzinfo=pytz.UTC)
     n_bars = days * 24 * 4
     times = pd.date_range(start, periods=n_bars, freq="15min", tz="UTC")
-    # Geometric Brownian motion with intraday range
+    # Geometric Brownian motion on the close path, then derive realistic candles
     drift = 0.00002
     vol   = 0.002
     rets  = rng.normal(drift, vol, n_bars)
     close = 17000 * np.exp(np.cumsum(rets))
-    rng_pct = rng.uniform(0.0005, 0.003, n_bars)
-    high = close * (1 + rng_pct/2)
-    low  = close * (1 - rng_pct/2)
     open_ = np.r_[close[0], close[:-1]]
+    # Intra-bar range relative to bar magnitude
+    half_rng = np.abs(close - open_) * rng.uniform(0.4, 1.5, n_bars) + close * 0.0005
+    raw_high = np.maximum(open_, close) + half_rng
+    raw_low  = np.minimum(open_, close) - half_rng
     volume = rng.integers(500, 5000, n_bars)
-    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume}, index=times)
+    return pd.DataFrame({"open": open_, "high": raw_high, "low": raw_low,
+                         "close": close, "volume": volume}, index=times)
 
 # ────────────────────────────────────────────────────────────────────────────
 # MAIN

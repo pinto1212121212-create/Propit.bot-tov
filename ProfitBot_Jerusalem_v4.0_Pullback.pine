@@ -1,0 +1,339 @@
+//@version=5
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║       ProfitBot | Jerusalem v4.0 — Momentum Pullback Edition            ║
+// ║       NQ1! · 15min · Prop Firm · TraderPost Webhook                     ║
+// ╠══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                          ║
+// ║  PHILOSOPHY: No more crossover noise. Three-layer professional entry.    ║
+// ║                                                                          ║
+// ║  LAYER 1 — DIRECTION (3-of-3 alignment required):                        ║
+// ║     • EMA21 slope  (trend)                                               ║
+// ║     • Close vs VWAP (institutional bias)                                 ║
+// ║     • MACD histogram sign (momentum)                                     ║
+// ║                                                                          ║
+// ║  LAYER 2 — CONTEXT FILTERS:                                              ║
+// ║     • ADX >= 20      (real trend, not chop)                              ║
+// ║     • BB Width high   (volatility present)                               ║
+// ║     • Volume > avg    (institutional participation)                      ║
+// ║                                                                          ║
+// ║  LAYER 3 — PULLBACK ENTRY (not crossover):                               ║
+// ║     • Price touches EMA21 from the direction side                        ║
+// ║     • Reversal candle confirms (engulf / pin / strong close)             ║
+// ║     • SL below pullback low / above pullback high                        ║
+// ║     • TP = 2× risk (configurable)                                        ║
+// ║                                                                          ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+strategy("ProfitBot | Jerusalem v4.0 — Momentum Pullback", overlay=true,
+     default_qty_type=strategy.fixed, default_qty_value=1, currency=currency.USD,
+     initial_capital=10000, commission_type=strategy.commission.cash_per_contract,
+     commission_value=2, max_labels_count=500, max_lines_count=500,
+     process_orders_on_close=true)
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS — SESSIONS & DAYS
+// ══════════════════════════════════════════════════════════════════════════
+
+use_s1     = input.bool(true,  title="✅ סשן 1 (08-12)", group="🕐 סשנים", inline="s1")
+sess1      = input.session("0800-1200", title="שעות", group="🕐 סשנים", inline="s1")
+use_s2     = input.bool(true,  title="✅ סשן 2 (13-16)", group="🕐 סשנים", inline="s2")
+sess2      = input.session("1300-1600", title="שעות", group="🕐 סשנים", inline="s2")
+use_close  = input.bool(true,  title="✅ סגירה בסוף יום", group="⏰ סגירה", inline="cl")
+close_time = input.string("16:00", title="🕐", group="⏰ סגירה", inline="cl",
+     options=["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00",
+              "16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"])
+
+use_sun = input.bool(true,  title="א׳", group="🗓️ ימים", inline="d")
+use_mon = input.bool(true,  title="ב׳", group="🗓️ ימים", inline="d")
+use_tue = input.bool(true,  title="ג׳", group="🗓️ ימים", inline="d")
+use_wed = input.bool(true,  title="ד׳", group="🗓️ ימים", inline="d")
+use_thu = input.bool(true,  title="ה׳", group="🗓️ ימים", inline="d")
+use_fri = input.bool(false, title="ו׳", group="🗓️ ימים", inline="d")
+use_sat = input.bool(false, title="ש׳", group="🗓️ ימים", inline="d")
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS — RISK (Prop Firm friendly)
+// ══════════════════════════════════════════════════════════════════════════
+
+contracts    = input.int(1,    title="חוזים",     minval=1, maxval=20,  group="💰 סיכון", inline="r1")
+max_loss     = input.float(500,title="הפסד יומי $", minval=0,             group="💰 סיכון", inline="r1")
+max_profit   = input.float(500,title="רווח יומי $", minval=0,             group="💰 סיכון", inline="r1")
+max_trades   = input.int(4,    title="עסקאות יום",  minval=1, maxval=20,  group="💰 סיכון", inline="r2")
+rr_ratio     = input.float(2.0,title="R:R",        minval=1.0, step=0.5, group="💰 סיכון", inline="r2")
+cd_bars      = input.int(4,    title="Cooldown בין עסקאות", minval=0, maxval=50, group="💰 סיכון", inline="r2")
+sl_buffer_t  = input.int(4,    title="SL Buffer (טיקים)", minval=0, maxval=50,  group="💰 סיכון", inline="r3")
+sl_max_t     = input.int(80,   title="SL מקסימום (טיקים)", minval=10, maxval=500, group="💰 סיכון", inline="r3")
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS — STRATEGY PARAMETERS
+// ══════════════════════════════════════════════════════════════════════════
+
+ema_len      = input.int(21,   title="EMA Length (pullback level)",   minval=5, maxval=200, group="📊 פרמטרים")
+macd_fast    = input.int(12,   title="MACD Fast",   minval=1, group="📊 פרמטרים", inline="macd")
+macd_slow    = input.int(26,   title="MACD Slow",   minval=1, group="📊 פרמטרים", inline="macd")
+macd_sig     = input.int(9,    title="MACD Signal", minval=1, group="📊 פרמטרים", inline="macd")
+adx_min      = input.float(20, title="ADX מינ׳",      minval=10, maxval=50, step=1, group="📊 פרמטרים", inline="filt")
+bbw_pctile   = input.float(40, title="BBW Percentile מינ׳", minval=10, maxval=90, step=5, group="📊 פרמטרים", inline="filt")
+vol_mult     = input.float(1.2,title="Volume × ממוצע", minval=0.5, maxval=5, step=0.1, group="📊 פרמטרים", inline="filt")
+pullback_lb  = input.int(3,    title="Pullback Lookback (ברים מהמכה)", minval=1, maxval=10, group="📊 פרמטרים")
+ema_touch_p  = input.float(0.15,title="EMA Touch Proximity (% מ-ATR)", minval=0.05, maxval=1.0, step=0.05, group="📊 פרמטרים")
+
+// ══════════════════════════════════════════════════════════════════════════
+// INPUTS — VISUAL & WEBHOOK
+// ══════════════════════════════════════════════════════════════════════════
+
+show_sl_tp   = input.bool(true, title="📏 SL/TP",   group="🎨 ויזואל", inline="vis")
+show_bg      = input.bool(true, title="🎨 רקע",     group="🎨 ויזואל", inline="vis")
+show_labels  = input.bool(true, title="🏷️ תוויות",  group="🎨 ויזואל", inline="vis")
+show_ema     = input.bool(true, title="📈 EMA",     group="🎨 ויזואל", inline="vis")
+show_vwap    = input.bool(true, title="📊 VWAP",    group="🎨 ויזואל", inline="vis")
+
+tp_token  = input.string("YOUR_TOKEN_HERE", title="Token",    group="🔗 TraderPost")
+tp_ticker = input.string("NQ1!",            title="Ticker",   group="🔗 TraderPost")
+tp_qty    = input.int(1,                    title="Quantity", minval=1, group="🔗 TraderPost")
+
+// ══════════════════════════════════════════════════════════════════════════
+// SESSION & DAY
+// ══════════════════════════════════════════════════════════════════════════
+
+tz        = "Asia/Jerusalem"
+dow       = dayofweek(time, tz)
+inS1      = use_s1 and not na(time("1", sess1, tz))
+inS2      = use_s2 and not na(time("1", sess2, tz))
+inSession = inS1 or inS2
+
+h           = hour(time, tz)
+mn          = minute(time, tz)
+hm          = h * 100 + mn
+close_h_val = int(str.tonumber(str.substring(close_time, 0, 2)))
+close_m_val = int(str.tonumber(str.substring(close_time, 3, 5)))
+close_hm    = close_h_val * 100 + close_m_val
+
+dayOk = (dow == dayofweek.sunday    and use_sun) or
+        (dow == dayofweek.monday    and use_mon) or
+        (dow == dayofweek.tuesday   and use_tue) or
+        (dow == dayofweek.wednesday and use_wed) or
+        (dow == dayofweek.thursday  and use_thu) or
+        (dow == dayofweek.friday    and use_fri) or
+        (dow == dayofweek.saturday  and use_sat)
+
+// ══════════════════════════════════════════════════════════════════════════
+// DAILY RISK STATE
+// ══════════════════════════════════════════════════════════════════════════
+
+isNewDay = ta.change(time("D")) != 0
+var float dayEq         = strategy.equity
+var int   dayCnt        = 0
+var int   lastEntryBar  = -999
+var int   lastEntryDir  = 0
+
+if isNewDay
+    dayEq        := strategy.equity
+    dayCnt       := 0
+    lastEntryBar := -999
+    lastEntryDir := 0
+
+dailyPnL      = strategy.equity - dayEq
+dailyLossOk   = dailyPnL > -math.abs(max_loss)
+dailyProfitOk = dailyPnL <  math.abs(max_profit)
+tradesOk      = dayCnt   < max_trades
+baseOk        = inSession and dailyLossOk and dailyProfitOk and tradesOk and dayOk and strategy.position_size == 0
+barsSinceEntry = bar_index - lastEntryBar
+
+// ══════════════════════════════════════════════════════════════════════════
+// CORE INDICATORS
+// ══════════════════════════════════════════════════════════════════════════
+
+ema21       = ta.ema(close, ema_len)
+ema21_slope = ema21 - ema21[3]                        // 3-bar slope
+
+vwapVal     = ta.vwap(close)
+
+[macdLine, macdSig, macdHist] = ta.macd(close, macd_fast, macd_slow, macd_sig)
+
+[diPlus, diMinus, adxVal] = ta.dmi(14, 14)
+
+[bbMid, bbUp, bbDn] = ta.bb(close, 20, 2.0)
+bbWidth             = (bbUp - bbDn) / bbMid * 100
+bbw_lb              = 100                               // lookback for percentile
+bbw_threshold       = ta.percentile_linear_interpolation(bbWidth, bbw_lb, bbw_pctile)
+
+atrVal              = ta.atr(14)
+volMA               = ta.sma(volume, 20)
+
+// ══════════════════════════════════════════════════════════════════════════
+// LAYER 1 — DIRECTION (3-of-3 alignment)
+// ══════════════════════════════════════════════════════════════════════════
+
+dir_ema_long   = ema21_slope > 0
+dir_ema_short  = ema21_slope < 0
+dir_vwap_long  = close > vwapVal
+dir_vwap_short = close < vwapVal
+dir_macd_long  = macdHist > 0
+dir_macd_short = macdHist < 0
+
+directionLong  = dir_ema_long  and dir_vwap_long  and dir_macd_long
+directionShort = dir_ema_short and dir_vwap_short and dir_macd_short
+
+// ══════════════════════════════════════════════════════════════════════════
+// LAYER 2 — CONTEXT FILTERS
+// ══════════════════════════════════════════════════════════════════════════
+
+adx_ok = adxVal >= adx_min
+bbw_ok = bbWidth >= bbw_threshold
+vol_ok = volume >= volMA * vol_mult
+
+contextOk = adx_ok and bbw_ok and vol_ok
+
+// ══════════════════════════════════════════════════════════════════════════
+// LAYER 3 — PULLBACK ENTRY TRIGGER
+// ══════════════════════════════════════════════════════════════════════════
+
+// Did price recently touch EMA21? (within last `pullback_lb` bars and within proximity)
+proximity      = ema_touch_p * atrVal
+touched_ema_lb = false
+for i = 0 to pullback_lb
+    if math.abs(low[i]  - ema21[i]) <= proximity or math.abs(high[i] - ema21[i]) <= proximity
+        touched_ema_lb := true
+        break
+
+// Reversal candle definition
+body       = math.abs(close - open)
+range_     = high - low
+body_ratio = range_ > 0 ? body / range_ : 0
+upper_wick = high - math.max(close, open)
+lower_wick = math.min(close, open) - low
+
+// Bullish reversal: closes in upper half + reasonable body + small upper wick
+bullishReversal = close > open and body_ratio >= 0.4 and lower_wick > body * 0.5
+// Bearish reversal: closes in lower half + reasonable body + small lower wick
+bearishReversal = close < open and body_ratio >= 0.4 and upper_wick > body * 0.5
+
+// Bullish engulfing as alternative trigger
+bullEngulf  = close > open and close[1] < open[1] and close > open[1] and open < close[1]
+bearEngulf  = close < open and close[1] > open[1] and close < open[1] and open > close[1]
+
+triggerLong  = (bullishReversal or bullEngulf) and close > ema21
+triggerShort = (bearishReversal or bearEngulf) and close < ema21
+
+// ══════════════════════════════════════════════════════════════════════════
+// FIRST SESSION BAR GUARD (no entries on the very first bar of a session)
+// ══════════════════════════════════════════════════════════════════════════
+
+isFirstSessionBar = inSession and not inSession[1]
+
+// ══════════════════════════════════════════════════════════════════════════
+// FINAL ENTRY GATES
+// ══════════════════════════════════════════════════════════════════════════
+
+cooldownOk = barsSinceEntry >= cd_bars
+
+canLong  = baseOk and directionLong  and contextOk and touched_ema_lb and triggerLong
+           and not isFirstSessionBar and cooldownOk
+canShort = baseOk and directionShort and contextOk and touched_ema_lb and triggerShort
+           and not isFirstSessionBar and cooldownOk
+
+// ══════════════════════════════════════════════════════════════════════════
+// STRUCTURE-BASED SL / TP
+// ══════════════════════════════════════════════════════════════════════════
+
+tick           = syminfo.mintick
+sl_buffer      = sl_buffer_t * tick
+sl_max         = sl_max_t * tick
+
+pullback_low   = ta.lowest(low,  pullback_lb + 1)
+pullback_high  = ta.highest(high, pullback_lb + 1)
+
+sl_long_raw    = pullback_low  - sl_buffer
+sl_short_raw   = pullback_high + sl_buffer
+
+// Cap SL distance
+sl_long  = math.max(sl_long_raw,  close - sl_max)
+sl_short = math.min(sl_short_raw, close + sl_max)
+
+risk_long  = close - sl_long
+risk_short = sl_short - close
+tp_long    = close + risk_long  * rr_ratio
+tp_short   = close - risk_short * rr_ratio
+
+// ══════════════════════════════════════════════════════════════════════════
+// WEBHOOK MESSAGES (TraderPost compatible)
+// ══════════════════════════════════════════════════════════════════════════
+
+long_msg  = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"buy","quantity":"'  + str.tostring(tp_qty) + '","orderType":"market"}'
+short_msg = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"sell","quantity":"' + str.tostring(tp_qty) + '","orderType":"market"}'
+close_msg = '{"token":"' + tp_token + '","ticker":"' + tp_ticker + '","action":"exit","quantity":"' + str.tostring(tp_qty) + '","orderType":"market"}'
+
+// ══════════════════════════════════════════════════════════════════════════
+// ENTRIES
+// ══════════════════════════════════════════════════════════════════════════
+
+if canLong
+    strategy.entry("Long", strategy.long, qty=contracts, comment="🟢 L PB", alert_message=long_msg)
+    strategy.exit("Exit L", "Long", stop=sl_long, limit=tp_long, alert_message=close_msg)
+    dayCnt       := dayCnt + 1
+    lastEntryBar := bar_index
+    lastEntryDir := 1
+    if show_labels
+        label.new(bar_index, low, text="▲ Long\nSL " + str.tostring(math.round_to_mintick(sl_long))
+             + "\nTP " + str.tostring(math.round_to_mintick(tp_long)),
+             color=color.new(#1565C0, 0), textcolor=color.white, style=label.style_label_up, size=size.small)
+    if show_sl_tp
+        line.new(bar_index, sl_long, bar_index + 20, sl_long, color=color.new(#EF5350, 0), width=1, style=line.style_dashed)
+        line.new(bar_index, tp_long, bar_index + 20, tp_long, color=color.new(#00C853, 0), width=1, style=line.style_dashed)
+
+if canShort and not canLong
+    strategy.entry("Short", strategy.short, qty=contracts, comment="🔴 S PB", alert_message=short_msg)
+    strategy.exit("Exit S", "Short", stop=sl_short, limit=tp_short, alert_message=close_msg)
+    dayCnt       := dayCnt + 1
+    lastEntryBar := bar_index
+    lastEntryDir := -1
+    if show_labels
+        label.new(bar_index, high, text="▼ Short\nSL " + str.tostring(math.round_to_mintick(sl_short))
+             + "\nTP " + str.tostring(math.round_to_mintick(tp_short)),
+             color=color.new(#B71C1C, 0), textcolor=color.white, style=label.style_label_down, size=size.small)
+    if show_sl_tp
+        line.new(bar_index, sl_short, bar_index + 20, sl_short, color=color.new(#EF5350, 0), width=1, style=line.style_dashed)
+        line.new(bar_index, tp_short, bar_index + 20, tp_short, color=color.new(#00C853, 0), width=1, style=line.style_dashed)
+
+// ══════════════════════════════════════════════════════════════════════════
+// FORCED CLOSES
+// ══════════════════════════════════════════════════════════════════════════
+
+closeReason = use_close and hm >= close_hm ? "⏰ סגירה" :
+              not inSession                ? "🏁 סשן"  :
+              not dailyLossOk              ? "❌ הפסד" :
+              not dailyProfitOk            ? "✅ רווח" : ""
+
+if closeReason != "" and strategy.position_size != 0
+    strategy.close_all(comment=closeReason, alert_message=close_msg)
+
+// ══════════════════════════════════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════════════════════════════════
+
+bgcolor(show_bg and inS1 ? color.new(#2196F3, 93) : na)
+bgcolor(show_bg and inS2 ? color.new(#4CAF50, 93) : na)
+plot(show_ema  ? ema21   : na, "EMA21", color.new(#FF9800, 0), linewidth=2)
+plot(show_vwap ? vwapVal : na, "VWAP",  color.new(#9C27B0, 0), linewidth=2)
+plot(bbUp, "BB Upper", color.new(#2196F3, 60), linewidth=1)
+plot(bbDn, "BB Lower", color.new(#2196F3, 60), linewidth=1)
+plotshape(canLong,                 title="Long Setup",  location=location.belowbar, color=color.new(#00C853, 0), style=shape.triangleup,   size=size.small, text="L")
+plotshape(canShort and not canLong,title="Short Setup", location=location.abovebar, color=color.new(#EF5350, 0), style=shape.triangledown, size=size.small, text="S")
+
+// ══════════════════════════════════════════════════════════════════════════
+// DATA WINDOW EXPORTS
+// ══════════════════════════════════════════════════════════════════════════
+
+plot(directionLong  ? 1 : 0, "Dir Long",   display=display.data_window)
+plot(directionShort ? 1 : 0, "Dir Short",  display=display.data_window)
+plot(adx_ok         ? 1 : 0, "ADX OK",     display=display.data_window)
+plot(bbw_ok         ? 1 : 0, "BBW OK",     display=display.data_window)
+plot(vol_ok         ? 1 : 0, "Vol OK",     display=display.data_window)
+plot(touched_ema_lb ? 1 : 0, "EMA Touch",  display=display.data_window)
+plot(triggerLong    ? 1 : 0, "Trig Long",  display=display.data_window)
+plot(triggerShort   ? 1 : 0, "Trig Short", display=display.data_window)
+plot(adxVal,                 "ADX",        display=display.data_window)
+plot(bbWidth,                "BB Width",   display=display.data_window)
+plot(bbw_threshold,          "BBW Thresh", display=display.data_window)
+plot(volume / volMA,         "Vol Ratio",  display=display.data_window)
